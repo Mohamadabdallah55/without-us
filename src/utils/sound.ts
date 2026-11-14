@@ -1,80 +1,61 @@
-/**
- * Procedural non-musical Web Audio synthesizer (wood taps & soft chimes).
- * Defaults to Quiet Mode (muted = true) suitable for mosque gatherings.
- */
+/** Short procedural sound effects. Muted by default. */
+export type SoundMode = 'muted' | 'quiet' | 'on';
 
 class SoundManager {
   private ctx: AudioContext | null = null;
-  private muted = true; // Quiet mode ON by default
+  private output: GainNode | null = null;
+  private mode: SoundMode = 'muted';
 
-  isMuted(): boolean {
-    return this.muted;
+  setMode(mode: SoundMode) {
+    this.mode = mode;
+    if (this.output) this.output.gain.value = this.volume();
   }
 
-  setMuted(next: boolean) {
-    this.muted = next;
+  private volume() {
+    return this.mode === 'muted' ? 0 : this.mode === 'quiet' ? .24 : .7;
   }
 
-  private getCtx(): AudioContext | null {
-    if (this.muted || typeof window === 'undefined') return null;
-    if (!this.ctx) {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtx) return null;
-      this.ctx = new AudioCtx();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
-    return this.ctx;
-  }
-
-  private playTone(freq: number, duration: number, type: OscillatorType = 'sine', gainPeak = 0.08, delay = 0) {
-    const ctx = this.getCtx();
-    if (!ctx) return;
-    const now = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(gainPeak, now + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + duration + 0.02);
-  }
-
-  playTap() {
-    this.playTone(520, 0.06, 'triangle', 0.05);
-  }
-
-  playReveal(isOutlier: boolean) {
-    if (isOutlier) {
-      this.playTone(392, 0.14, 'triangle', 0.07, 0);
-      this.playTone(311, 0.22, 'triangle', 0.07, 0.09);
-    } else {
-      this.playTone(523.25, 0.12, 'sine', 0.06, 0);
-      this.playTone(659.25, 0.2, 'sine', 0.06, 0.08);
+  private impact(low: number, high: number, duration: number, delay = 0) {
+    if (this.mode === 'muted') return;
+    try {
+      const Context = window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Context) return;
+      this.ctx ??= new Context();
+      const ctx = this.ctx;
+      if (!this.output) {
+        this.output = ctx.createGain();
+        this.output.gain.value = this.volume();
+        this.output.connect(ctx.destination);
+      }
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+      const frames = Math.ceil(ctx.sampleRate * duration);
+      const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let i = 0; i < frames; i++) samples[i] = (Math.random() * 2 - 1) * (1 - i / frames) ** 2;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.Q.value = .55;
+      const at = ctx.currentTime + delay;
+      filter.frequency.setValueAtTime(high, at);
+      filter.frequency.exponentialRampToValueAtTime(low, at + duration);
+      source.connect(filter).connect(this.output);
+      source.start(at);
+    } catch {
+      // Audio support or permission must never interrupt play.
     }
   }
 
-  playTick() {
-    this.playTone(880, 0.035, 'sine', 0.035);
-  }
-
-  playDramaticCue() {
-    this.playTone(293.66, 0.18, 'triangle', 0.07, 0);
-    this.playTone(440, 0.28, 'sine', 0.07, 0.14);
-  }
-
-  playVictory() {
-    this.playTone(523.25, 0.14, 'sine', 0.07, 0);
-    this.playTone(659.25, 0.14, 'sine', 0.07, 0.1);
-    this.playTone(783.99, 0.28, 'sine', 0.08, 0.2);
-  }
+  playTap() { this.impact(420, 1450, .055); }
+  playTick() { this.impact(1200, 2900, .045); }
+  playStart() { this.impact(170, 860, .16); }
+  playFaceoff() { this.impact(280, 1700, .17); this.impact(560, 2050, .08, .075); }
+  playDramaticCue() { this.impact(190, 980, .22); }
+  playReveal() { this.impact(130, 2700, .25); }
+  playLead() { this.impact(840, 2400, .10, .18); }
+  playVictory() { this.impact(190, 3200, .34); this.impact(600, 2400, .13, .18); }
 }
 
 export const soundFx = new SoundManager();

@@ -1,81 +1,32 @@
 import React from 'react';
 
-/**
- * Bespoke inline SVG Title Emblem & Geometric Arabic Lockup
- * No external logo dependencies; pure vector craft in midnight navy, turquoise, and warm gold.
- */
-export const GameBrandLockup: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
-  if (compact) {
-    return (
-      <div className="inline-flex items-center gap-3 select-none">
-        <svg viewBox="0 0 44 44" className="w-9 h-9 shrink-0" aria-hidden="true">
-          <defs>
-            <linearGradient id="gmGoldCompact" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#F5C451" />
-              <stop offset="100%" stopColor="#D4A13E" />
-            </linearGradient>
-          </defs>
-          <polygon
-            points="22,2 27.8,8.2 36.2,8.2 36.2,16.6 42,22 36.2,27.4 36.2,35.8 27.8,35.8 22,42 16.2,35.8 7.8,35.8 7.8,27.4 2,22 7.8,16.6 7.8,8.2 16.2,8.2"
-            fill="#0B1526"
-            stroke="url(#gmGoldCompact)"
-            strokeWidth="2"
-          />
-          <circle cx="22" cy="22" r="9" fill="none" stroke="#2DD4BF" strokeWidth="1.8" />
-          <path d="M22 15v8m0 4h.01" stroke="#F5C451" strokeWidth="2.4" strokeLinecap="round" />
-        </svg>
-        <span className="font-display font-extrabold text-lg sm:text-xl tracking-tight text-slate-50 whitespace-nowrap">
-          هو معنا... <span className="text-teal-300">بس مش معنا!</span>
-        </span>
-      </div>
-    );
-  }
+import { GAME_BRAND } from '../game/brand';
 
+export function SuspectMascot({ mini = false }: { mini?: boolean }) {
   return (
-    <div className="flex flex-col items-center text-center select-none">
-      <svg viewBox="0 0 120 120" className="w-24 h-24 sm:w-28 sm:h-28 mb-4 drop-shadow-[0_12px_28px_rgba(20,184,166,0.22)]" aria-hidden="true">
-        <defs>
-          <linearGradient id="gmGoldHero" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#FDE68A" />
-            <stop offset="50%" stopColor="#F5C451" />
-            <stop offset="100%" stopColor="#B47B1E" />
-          </linearGradient>
-          <linearGradient id="gmTealHero" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2DD4BF" />
-            <stop offset="100%" stopColor="#0D9488" />
-          </linearGradient>
-        </defs>
-        {/* Outer eight-pointed Islamic geometric star */}
-        <polygon
-          points="60,6 75,21 99,21 99,45 114,60 99,75 99,99 75,99 60,114 45,99 21,99 21,75 6,60 21,45 21,21 45,21"
-          fill="#0B1526"
-          stroke="url(#gmGoldHero)"
-          strokeWidth="2.5"
-        />
-        <polygon
-          points="60,14 72,26 92,26 92,48 106,60 92,72 92,94 72,94 60,106 48,94 28,94 28,72 14,60 28,48 28,26 48,26"
-          fill="none"
-          stroke="url(#gmTealHero)"
-          strokeWidth="1.5"
-          opacity="0.7"
-        />
-        {/* Four interlocking majlis arcs representing the group + 1 glowing hidden question mark */}
-        <circle cx="60" cy="60" r="24" fill="#070E1A" stroke="url(#gmTealHero)" strokeWidth="2.5" />
-        <path
-          d="M52.5 51.5c0-4.4 3.4-7.5 7.8-7.5 4.4 0 7.7 3 7.7 6.8 0 3.2-1.8 5.2-4.8 6.8-2.2 1.2-3.2 2.4-3.2 4.9v1.5"
-          fill="none"
-          stroke="url(#gmGoldHero)"
-          strokeWidth="4.2"
-          strokeLinecap="round"
-        />
-        <circle cx="60" cy="73.5" r="2.8" fill="#2DD4BF" />
-      </svg>
-      <h1 className="font-display font-black text-3xl sm:text-5xl lg:text-6xl tracking-tight text-slate-50 leading-tight [text-wrap:balance]">
-        هو معنا... <span className="text-teal-300">بس مش معنا!</span>
-      </h1>
-    </div>
+    <svg className={mini ? 'party-mascot-mini' : 'party-mascot'} viewBox="0 0 280 260" aria-hidden="true">
+      <g stroke="#271638" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
+        <path fill="#FF65A3" d="M57 88l-26 10 10 34 23-6m145-14 32-8 11 35-41 13"/>
+        <path fill="#45C8FF" d="m92 203-16 29 28 7 16-31m40 2 12 31 28-7-10-32"/>
+        <path fill="#271638" d="M89 53l109 12q30 4 27 34l-11 94q-4 30-35 26l-105-12q-27-4-23-34l10-92q3-31 28-28Z"/>
+        <path fill="#FFE45E" d="M88 43l109 12q30 4 27 34l-11 94q-4 30-35 26L73 197q-27-4-23-34l10-92q3-31 28-28Z"/>
+        <path fill="#FFF9ED" d="M76 112q3-25 26-20 23 4 20 29-3 22-26 19-23-4-20-28Z"/>
+        <path fill="#FFF9ED" d="M134 114q1-20 31-19 29 1 26 24-2 23-30 22-29-1-27-27Z"/>
+        <path fill="none" d="m81 81 26-5m38 7 32-10m-54 87q14 11 30-2"/>
+        <path strokeWidth="11" d="M108 117v3m66-4v3"/>
+        <path fill="#FF65A3" strokeWidth="4" d="m204 34 12-20 9 16 18 3-15 13 1 18-17-10-18 4 7-16-10-15Z"/>
+        <path stroke="#FFF9ED" d="M66 31l-9-11m-13 31-14-1m205 131 12 7m-17 9 6 14"/>
+      </g>
+    </svg>
   );
-};
+}
+
+export function GameBrandLockup({ compact = false }: { compact?: boolean }) {
+  return <div className={`party-brand ${compact ? 'party-brand-compact' : ''}`}>
+    <SuspectMascot mini={compact} />
+    <span>{GAME_BRAND.name}</span>
+  </div>;
+}
 
 export const GeometricDivider: React.FC = () => (
   <div className="flex items-center justify-center gap-3 my-4 opacity-70" aria-hidden="true">

@@ -1,3 +1,4 @@
+import { hasRoundCapacity } from '../game/rules';
 import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
@@ -25,7 +26,7 @@ interface SetupWizardProps {
   initialPlayers: string[];
   onBack: () => void;
   onStartSingleDevice: (config: GameConfig, playerNames: string[]) => void;
-  onCreateMultiDeviceRoom: (config: GameConfig, hostName: string) => void;
+  onCreateMultiDeviceRoom: (config: GameConfig, hostName: string) => Promise<void>;
 }
 
 const AGE_BAND_OPTIONS: Array<{ id: AgeBand; label: string; desc: string }> = [
@@ -164,7 +165,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
     setStep((s) => Math.min(7, s + 1));
   };
 
-  const handleFinish = () => {
+  const creating = React.useRef(false);
+  const handleFinish = async () => {
+    if (creating.current) return;
+    if (!hasRoundCapacity(config, bank, config.totalRounds)) {
+      setErrorMsg('عدد الجولات أكبر من الكلمات المتاحة بدون تكرار. وسّع الفئات أو قلّل الجولات.');
+      return;
+    }
     if (config.categories.length === 0 || availablePoolCount === 0) {
       setErrorMsg('اختر فئة تحتوي على كلمات أو أزواج متاحة.');
       return;
@@ -178,7 +185,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
       onStartSingleDevice(config, playerNames);
     } else {
       const cleanHost = sanitizeUserText(hostName, 22) || 'المضيف';
-      onCreateMultiDeviceRoom(config, cleanHost);
+      creating.current = true;
+      try {
+        await onCreateMultiDeviceRoom(config, cleanHost);
+      } catch (error) {
+        setErrorMsg((error as Error).message);
+      } finally {
+        creating.current = false;
+      }
     }
   };
 
@@ -193,29 +207,29 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-[#070E1A] text-slate-100 flex flex-col">
+    <div className="min-h-svh bg-transparent text-ink flex flex-col">
       {/* Top Bar */}
-      <header className="border-b border-white/10 bg-[#0B1526]/90 px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
+      <header className="border-b border-ink/25 bg-paper/90 px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
         <button
           type="button"
           onClick={onBack}
-          className="min-h-[44px] px-3.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 text-sm font-medium inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
+          className="min-h-[44px] px-3.5 rounded-xl bg-lilac hover:bg-lilac text-ink text-sm font-medium inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
         >
           <ArrowRight className="w-4 h-4" />
           <span>الرئيسية</span>
         </button>
 
         <div className="text-center">
-          <h2 className="font-display font-bold text-lg sm:text-xl text-slate-50">
+          <h2 className="font-display font-bold text-lg sm:text-xl text-ink">
             معالج إعداد المباراة
           </h2>
-          <p className="text-xs text-teal-300 tabular-nums">
+          <p className="text-xs text-berry tabular-nums">
             الخطوة {step} من 7 · {stepLabels[step - 1]}
           </p>
         </div>
 
-        <div className="text-xs text-slate-400 tabular-nums hidden sm:block">
-          المتاح للعب: <strong className="text-amber-300">{availablePoolCount}</strong>
+        <div className="text-xs text-caption tabular-nums hidden sm:block">
+          المتاح للعب: <strong className="text-berry">{availablePoolCount}</strong>
         </div>
       </header>
 
@@ -236,10 +250,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 }}
                 className={`min-h-[40px] px-1.5 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer truncate ${
                   active
-                    ? 'bg-teal-500 text-[#051019]'
+                    ? 'bg-mintplay text-ink'
                     : done
-                    ? 'bg-teal-500/20 text-teal-200 border border-teal-400/30'
-                    : 'bg-[#0F1B30] text-slate-400 border border-white/10 hover:text-slate-200'
+                    ? 'bg-teal-500/20 text-berry border border-teal-400/30'
+                    : 'bg-lilac text-caption border border-ink/25 hover:text-ink'
                 }`}
                 title={lbl}
               >
@@ -253,10 +267,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
       {/* Main Step Content */}
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-8 py-6 flex flex-col justify-between gap-6">
-        <div className="bg-[#0B1526] border border-white/10 rounded-2xl p-5 sm:p-8 shadow-xl">
+        <div className="bg-paper border border-ink/25 rounded-2xl p-5 sm:p-8 shadow-xl">
           {errorMsg && (
-            <div role="alert" className="mb-5 p-4 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-200 text-sm flex items-center gap-2.5">
-              <ShieldAlert className="w-5 h-5 shrink-0 text-rose-300" />
+            <div role="alert" className="mb-5 p-4 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-800 text-sm flex items-center gap-2.5">
+              <ShieldAlert className="w-5 h-5 shrink-0 text-rose-800" />
               <span>{errorMsg}</span>
             </div>
           )}
@@ -265,10 +279,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <h3 className="font-display font-bold text-2xl text-slate-50">
+                <h3 className="font-display font-bold text-2xl text-ink">
                   كيف ستلعبون اليوم؟
                 </h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="text-sm text-caption mt-1">
                   اختر اللعب بالتمرير على هاتف واحد، أو ربط هواتف اللاعبين بغرفة خاصة وبروجكتر.
                 </p>
               </div>
@@ -279,21 +293,21 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   onClick={() => setConfig({ ...config, deviceMode: 'single_device' })}
                   className={`text-right p-6 rounded-2xl border transition-all cursor-pointer flex flex-col gap-3 ${
                     config.deviceMode === 'single_device'
-                      ? 'bg-teal-500/15 border-teal-400 ring-1 ring-teal-400'
-                      : 'bg-[#101E36] border-white/10 hover:border-teal-400/40'
+                      ? 'bg-mintplay/40 border-teal-400 ring-1 ring-teal-400'
+                      : 'bg-lilac border-ink/25 hover:border-teal-400/40'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <Smartphone className="w-7 h-7 text-teal-300" />
-                    <span className="text-xs font-bold text-teal-300">Pass & Play</span>
+                    <Smartphone className="w-7 h-7 text-berry" />
+                    <span className="text-xs font-bold text-berry">Pass & Play</span>
                   </div>
-                  <div className="font-display font-extrabold text-xl text-slate-50">
+                  <div className="font-display font-extrabold text-xl text-ink">
                     جهاز واحد (تمرير الهاتف)
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-sm text-caption leading-relaxed">
                     هاتف واحد يتنقل بين اللاعبين مع شاشة حجب كاملة وزر ضغط مطول لكشف الكلمة سرًا. يعمل حتى بدون إنترنت بعد التحميل.
                   </p>
-                  <p className="text-xs text-amber-200/80 pt-2 border-t border-white/10">
+                  <p className="text-xs text-berry pt-2 border-t border-ink/25">
                     تنبيه خصوصية: وضع الجهاز الواحد يحمي أثناء التمرير فقط، بينما العزل التقني الكامل يتحقق في وضع الأجهزة المتعددة.
                   </p>
                 </button>
@@ -303,21 +317,21 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   onClick={() => setConfig({ ...config, deviceMode: 'multi_device' })}
                   className={`text-right p-6 rounded-2xl border transition-all cursor-pointer flex flex-col gap-3 ${
                     config.deviceMode === 'multi_device'
-                      ? 'bg-teal-500/15 border-teal-400 ring-1 ring-teal-400'
-                      : 'bg-[#101E36] border-white/10 hover:border-teal-400/40'
+                      ? 'bg-mintplay/40 border-teal-400 ring-1 ring-teal-400'
+                      : 'bg-lilac border-ink/25 hover:border-teal-400/40'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <Wifi className="w-7 h-7 text-amber-300" />
-                    <span className="text-xs font-bold text-amber-300">غرفة خاصة + QR + بروجكتر</span>
+                    <Wifi className="w-7 h-7 text-berry" />
+                    <span className="text-xs font-bold text-berry">غرفة خاصة + QR + بروجكتر</span>
                   </div>
-                  <div className="font-display font-extrabold text-xl text-slate-50">
+                  <div className="font-display font-extrabold text-xl text-ink">
                     أجهزة متعددة (كل لاعب بهاتفه)
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-sm text-caption leading-relaxed">
                     ينشئ المشرف غرفة برمز انضمام وQR. يستلم كل لاعب كلمته سرًا على جهازه عبر الخادم مع إمكانية عرض شاشة 16:9 على البروجكتر.
                   </p>
-                  <p className="text-xs text-teal-200/80 pt-2 border-t border-white/10">
+                  <p className="text-xs text-berry pt-2 border-t border-ink/25">
                     حماية خادم حقيقية: لا تُرسل كلمات أو أدوار الآخرين إلى متصفح اللاعب أو شاشة البروجكتر.
                   </p>
                 </button>
@@ -332,10 +346,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h3 className="font-display font-bold text-2xl text-slate-50">
+                      <h3 className="font-display font-bold text-2xl text-ink">
                         أسماء اللاعبين ({playerNames.length}/12)
                       </h3>
-                      <p className="text-sm text-slate-300 mt-1">
+                      <p className="text-sm text-caption mt-1">
                         أضف من 3 إلى 12 لاعبًا (وضع «اثنين مش معنا» يتطلب 8 لاعبين على الأقل).
                       </p>
                     </div>
@@ -355,12 +369,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                       placeholder="اكتب اسم اللاعب..."
                       aria-label="اسم اللاعب الجديد"
                       maxLength={22}
-                      className="flex-1 min-h-[48px] px-4 rounded-xl bg-[#070E1A] border border-white/15 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-teal-400"
+                      className="flex-1 min-h-[48px] px-4 rounded-xl bg-paper border border-ink/25 text-ink placeholder:text-ink0 focus:outline-none focus:border-teal-400"
                     />
                     <button
                       type="button"
                       onClick={handleAddPlayer}
-                      className="min-h-[48px] px-5 rounded-xl bg-teal-500 hover:bg-teal-400 text-[#051019] font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      className="min-h-[48px] px-5 rounded-xl bg-mintplay hover:bg-mintplay text-ink font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                     >
                       <Plus className="w-5 h-5" />
                       <span>إضافة</span>
@@ -371,17 +385,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     {playerNames.map((name, idx) => (
                       <div
                         key={`${name}-${idx}`}
-                        className="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-[#101E36] border border-white/10"
+                        className="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-lilac border border-ink/25"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <PlayerAvatar index={idx} size="sm" />
-                          <span className="font-semibold text-slate-100 truncate">{name}</span>
+                          <span className="font-semibold text-ink truncate">{name}</span>
                         </div>
                         <button
                           type="button"
                           onClick={() => handleRemovePlayer(idx)}
                           aria-label={`حذف ${name}`}
-                          className="min-h-[36px] min-w-[36px] rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 flex items-center justify-center cursor-pointer"
+                          className="min-h-[36px] min-w-[36px] rounded-lg hover:bg-rose-500/20 text-caption hover:text-rose-800 flex items-center justify-center cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -392,21 +406,21 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
               ) : (
                 <div className="max-w-md space-y-4">
                   <div>
-                    <h3 className="font-display font-bold text-2xl text-slate-50">
+                    <h3 className="font-display font-bold text-2xl text-ink">
                       اسم المضيف (المشرف)
                     </h3>
-                    <p className="text-sm text-slate-300 mt-1">
+                    <p className="text-sm text-caption mt-1">
                       بعد إنهاء الإعداد سيتم فتح غرفة خاصة برمز وQR لينضم إليها باقي اللاعبين من هواتفهم.
                     </p>
                   </div>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium text-slate-200">الاسم المستعار للمضيف</span>
+                    <span className="text-sm font-medium text-ink">الاسم المستعار للمضيف</span>
                     <input
                       type="text"
                       value={hostName}
                       onChange={(e) => setHostName(e.target.value)}
                       maxLength={22}
-                      className="w-full min-h-[48px] px-4 rounded-xl bg-[#070E1A] border border-white/15 text-slate-100 focus:outline-none focus:border-teal-400"
+                      className="w-full min-h-[48px] px-4 rounded-xl bg-paper border border-ink/25 text-ink focus:outline-none focus:border-teal-400"
                     />
                   </label>
                 </div>
@@ -418,10 +432,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           {step === 3 && (
             <div className="space-y-5">
               <div>
-                <h3 className="font-display font-bold text-2xl text-slate-50">
+                <h3 className="font-display font-bold text-2xl text-ink">
                   اختر وضع اللعب
                 </h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="text-sm text-caption mt-1">
                   لكل وضع قواعده الخاصة وتحديه الفريد في النقاش والاستنتاج.
                 </p>
               </div>
@@ -432,17 +446,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   onClick={() => handleModeChange('classic')}
                   className={`text-right p-5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
                     config.gameMode === 'classic'
-                      ? 'bg-teal-500/15 border-teal-400 ring-1 ring-teal-400'
-                      : 'bg-[#101E36] border-white/10 hover:border-teal-400/40'
+                      ? 'bg-mintplay/40 border-teal-400 ring-1 ring-teal-400'
+                      : 'bg-lilac border-ink/25 hover:border-teal-400/40'
                   }`}
                 >
-                  <div className="font-display font-extrabold text-xl text-teal-300">
+                  <div className="font-display font-extrabold text-xl text-berry">
                     مين مش معنا؟ (الكلاسيكي)
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-sm text-caption leading-relaxed">
                     3–12 لاعبًا. الجميع يعرفون الكلمة السرية إلا لاعبًا واحدًا يرى «أنت مش معنا». إذا اكتُشف، يحصل على فرصة واحدة لتخمين الكلمة!
                   </p>
-                  <p className="text-xs text-slate-400 mt-auto pt-2 border-t border-white/10">
+                  <p className="text-xs text-caption mt-auto pt-2 border-t border-ink/25">
                     النقاط: +{config.scoringRules.classicCorrectVote} للمصوّت الصحيح · +{config.scoringRules.classicOutlierSurvive} لنجاة المختلف · +{config.scoringRules.classicOutlierGuessBonus} لتخمين الكلمة
                   </p>
                 </button>
@@ -453,16 +467,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   className={`text-right p-5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
                     config.gameMode === 'confusing_pair'
                       ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400'
-                      : 'bg-[#101E36] border-white/10 hover:border-amber-400/40'
+                      : 'bg-lilac border-ink/25 hover:border-amber-400/40'
                   }`}
                 >
-                  <div className="font-display font-extrabold text-xl text-amber-300">
+                  <div className="font-display font-extrabold text-xl text-berry">
                     الملخبط (كلمتان متشابهتان)
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-sm text-caption leading-relaxed">
                     الأغلبية تحصل على كلمة (مثل «منسف») ولاعب واحد يحصل على كلمة قريبة (مثل «مقلوبة») دون أي تنبيه أنه المختلف!
                   </p>
-                  <p className="text-xs text-slate-400 mt-auto pt-2 border-t border-white/10">
+                  <p className="text-xs text-caption mt-auto pt-2 border-t border-ink/25">
                     يعتمد على {bank.confusing_pairs.filter((p) => p.status === 'approved').length} زوجًا معتمدًا من الدليل مع شرح الفرق بعد الجولة.
                   </p>
                 </button>
@@ -472,17 +486,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   onClick={() => handleModeChange('two_outliers')}
                   className={`text-right p-5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
                     config.gameMode === 'two_outliers'
-                      ? 'bg-teal-500/15 border-teal-400 ring-1 ring-teal-400'
-                      : 'bg-[#101E36] border-white/10 hover:border-teal-400/40'
+                      ? 'bg-mintplay/40 border-teal-400 ring-1 ring-teal-400'
+                      : 'bg-lilac border-ink/25 hover:border-teal-400/40'
                   }`}
                 >
                   <div className="font-display font-extrabold text-xl text-sky-300">
                     اثنين مش معنا (8–12 لاعبًا)
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-sm text-caption leading-relaxed">
                     لاعبان مختلفان وسط المجموعة! يصوّت كل لاعب على شخصين مختلفين سرًا، مع احتساب نقطة عن كل مختلف يتم كشفه.
                   </p>
-                  <p className="text-xs text-amber-200/80 mt-auto pt-2 border-t border-white/10">
+                  <p className="text-xs text-berry mt-auto pt-2 border-t border-ink/25">
                     متاح فقط من 8 لاعبين فأكثر لضمان توازن اللعب.
                   </p>
                 </button>
@@ -495,17 +509,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-display font-bold text-2xl text-slate-50">
+                  <h3 className="font-display font-bold text-2xl text-ink">
                     الفئات والفئة العمرية ومستوى الصعوبة
                   </h3>
-                  <p className="text-sm text-slate-300 mt-1">
-                    الرصيد المطابق لاختياراتك حاليًا: <strong className="text-teal-300 tabular-nums">{availablePoolCount}</strong> {config.gameMode === 'confusing_pair' ? 'زوجًا' : 'كلمة'}
+                  <p className="text-sm text-caption mt-1">
+                    الرصيد المطابق لاختياراتك حاليًا: <strong className="text-berry tabular-nums">{availablePoolCount}</strong> {config.gameMode === 'confusing_pair' ? 'زوجًا' : 'كلمة'}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={selectAllCategories}
-                  className="min-h-[40px] px-4 rounded-xl bg-teal-500/15 border border-teal-400/40 text-teal-200 text-xs font-bold cursor-pointer whitespace-nowrap"
+                  className="min-h-[40px] px-4 rounded-xl bg-mintplay/40 border border-teal-400/40 text-berry text-xs font-bold cursor-pointer whitespace-nowrap"
                 >
                   تحديد جميع الفئات
                 </button>
@@ -514,7 +528,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
               {/* Age & Difficulty */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-200 block">الفئة العمرية المناسبة</label>
+                  <label className="text-sm font-semibold text-ink block">الفئة العمرية المناسبة</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {AGE_BAND_OPTIONS.map((opt) => (
                       <button
@@ -523,19 +537,19 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                         onClick={() => setConfig({ ...config, ageBand: opt.id })}
                         className={`p-3 rounded-xl border text-right transition-colors cursor-pointer ${
                           config.ageBand === opt.id
-                            ? 'bg-teal-500/20 border-teal-400 text-teal-100'
-                            : 'bg-[#101E36] border-white/10 text-slate-300 hover:border-white/25'
+                            ? 'bg-teal-500/20 border-teal-400 text-berry'
+                            : 'bg-lilac border-ink/25 text-caption hover:border-ink/25'
                         }`}
                       >
                         <div className="text-sm font-bold">{opt.label}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">{opt.desc}</div>
+                        <div className="text-xs text-caption mt-0.5">{opt.desc}</div>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-200 block">
+                  <label className="text-sm font-semibold text-ink block">
                     الحد الأقصى للصعوبة ({config.maxDifficulty}/5)
                   </label>
                   <div className="grid grid-cols-5 gap-2">
@@ -546,15 +560,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                         onClick={() => setConfig({ ...config, maxDifficulty: lvl })}
                         className={`min-h-[48px] rounded-xl border font-bold tabular-nums cursor-pointer ${
                           config.maxDifficulty === lvl
-                            ? 'bg-amber-400 text-[#051019] border-amber-300'
-                            : 'bg-[#101E36] border-white/10 text-slate-300 hover:border-amber-400/40'
+                            ? 'bg-lemon text-ink border-amber-300'
+                            : 'bg-lilac border-ink/25 text-caption hover:border-amber-400/40'
                         }`}
                       >
                         {lvl}
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed pt-1">
+                  <p className="text-xs text-caption leading-relaxed pt-1">
                     المستوى 1–2 مباشر ومألوف للناشئة والأطفال، والمستوى 3–5 يضيف مصطلحات أعمق للشباب والعائلات.
                   </p>
                 </div>
@@ -572,16 +586,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                       onClick={() => toggleCategory(cat.id)}
                       className={`p-4 rounded-xl border text-right transition-all cursor-pointer flex flex-col gap-1.5 ${
                         selected
-                          ? 'bg-teal-500/15 border-teal-400 text-slate-50'
-                          : 'bg-[#101E36] border-white/10 text-slate-300 hover:border-white/25'
+                          ? 'bg-mintplay/40 border-teal-400 text-ink'
+                          : 'bg-lilac border-ink/25 text-caption hover:border-ink/25'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-display font-bold text-base">{cat.name_ar}</span>
-                        {selected && <Check className="w-4 h-4 text-teal-300 shrink-0" />}
+                        {selected && <Check className="w-4 h-4 text-berry shrink-0" />}
                       </div>
-                      <p className="text-xs text-slate-400 line-clamp-1">{cat.subcategories_summary}</p>
-                      <p className="text-xs text-amber-300/90 tabular-nums pt-1">
+                      <p className="text-xs text-caption line-clamp-1">{cat.subcategories_summary}</p>
+                      <p className="text-xs text-berry tabular-nums pt-1">
                         {count} {config.gameMode === 'confusing_pair' ? 'زوج' : 'كلمة'}
                       </p>
                     </button>
@@ -595,10 +609,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           {step === 5 && (
             <div className="space-y-5">
               <div>
-                <h3 className="font-display font-bold text-2xl text-slate-50">
+                <h3 className="font-display font-bold text-2xl text-ink">
                   عدد الجولات
                 </h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="text-sm text-caption mt-1">
                   تستمر المباراة دون تكرار الكلمات حتى إعلان الفائز النهائي.
                 </p>
               </div>
@@ -614,16 +628,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     }}
                     className={`min-h-[72px] rounded-2xl border font-display font-extrabold text-2xl tabular-nums cursor-pointer ${
                       config.totalRounds === r
-                        ? 'bg-teal-500 text-[#051019] border-teal-300'
-                        : 'bg-[#101E36] border-white/10 text-slate-200 hover:border-teal-400/40'
+                        ? 'bg-mintplay text-ink border-teal-300'
+                        : 'bg-lilac border-ink/25 text-ink hover:border-teal-400/40'
                     }`}
                   >
                     {r} جولات
                   </button>
                 ))}
 
-                <div className="p-3 rounded-2xl bg-[#101E36] border border-white/10 flex flex-col justify-center gap-1">
-                  <label className="text-xs text-slate-400">تخصيص (1–15)</label>
+                <div className="p-3 rounded-2xl bg-lilac border border-ink/25 flex flex-col justify-center gap-1">
+                  <label className="text-xs text-caption">تخصيص (1–15)</label>
                   <input
                     type="number"
                     min={1}
@@ -631,10 +645,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                     value={customRoundsInput}
                     onChange={(e) => {
                       setCustomRoundsInput(e.target.value);
-                      const val = Math.min(15, Math.max(1, Number(e.target.value) || 3));
+                      const val = Math.min(15, Math.max(1, Math.trunc(Number(e.target.value)) || 3));
                       setConfig({ ...config, totalRounds: val });
                     }}
-                    className="w-full px-3 py-1.5 rounded-lg bg-[#070E1A] border border-white/15 text-slate-100 font-bold tabular-nums"
+                    className="w-full px-3 py-1.5 rounded-lg bg-paper border border-ink/25 text-ink font-bold tabular-nums"
                   />
                 </div>
               </div>
@@ -645,16 +659,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           {step === 6 && (
             <div className="space-y-6">
               <div>
-                <h3 className="font-display font-bold text-2xl text-slate-50">
-                  مدة النقاش وقواعد النقاط
+                <h3 className="font-display font-bold text-2xl text-ink">
+                  ظبّطوا وقت الحكي
                 </h3>
-                <p className="text-sm text-slate-300 mt-1">
-                  تُثبّت قواعد النقاط هنا قبل بدء المباراة ولا يمكن تغييرها سرًا أثناء اللعب.
+                <p className="text-sm text-caption mt-1">
+                  تُثبّت قواعد النقاط هنا قبل يلا نبلّش! ولا يمكن تغييرها سرًا أثناء اللعب.
                 </p>
               </div>
 
               <div>
-                <label className="text-sm font-semibold text-slate-200 mb-2.5 block">
+                <label className="text-sm font-semibold text-ink mb-2.5 block">
                   مؤقت النقاش لكل جولة
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -671,8 +685,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                       onClick={() => setConfig({ ...config, discussionSeconds: t.sec })}
                       className={`min-h-[52px] rounded-xl border font-bold text-sm tabular-nums cursor-pointer ${
                         config.discussionSeconds === t.sec
-                          ? 'bg-amber-400 text-[#051019] border-amber-300'
-                          : 'bg-[#101E36] border-white/10 text-slate-200 hover:border-amber-400/40'
+                          ? 'bg-lemon text-ink border-amber-300'
+                          : 'bg-lilac border-ink/25 text-ink hover:border-amber-400/40'
                       }`}
                     >
                       {t.lbl}
@@ -681,12 +695,25 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-white/10">
+              <fieldset className="space-y-2">
+                <legend className="font-bold">وقت كل مواجهة</legend>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[0, 20, 30, 60].map((seconds) => (
+                    <button type="button" key={seconds} aria-pressed={config.questionSeconds === seconds}
+                      onClick={() => setConfig({ ...config, questionSeconds: seconds })}
+                      className={`min-h-[48px] rounded-xl border font-bold ${config.questionSeconds === seconds ? 'bg-lemon text-ink' : 'bg-lilac border-ink/25'}`}>
+                      {seconds ? `${seconds} ثانية` : 'بلا مؤقت'}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-ink/25">
                 <div className="space-y-3">
-                  <h4 className="font-bold text-base text-teal-300">نقاط المباراة (معلنة للجميع)</h4>
+                  <h4 className="font-bold text-base text-berry">نقاط المباراة (معلنة للجميع)</h4>
                   <div className="grid grid-cols-3 gap-2 text-xs">
-                    <label className="bg-[#101E36] p-3 rounded-xl border border-white/10 space-y-1">
-                      <span className="text-slate-300 block">اكتشاف المختلف</span>
+                    <label className="bg-lilac p-3 rounded-xl border border-ink/25 space-y-1">
+                      <span className="text-caption block">اكتشاف المختلف</span>
                       <input
                         type="number"
                         min={1}
@@ -704,11 +731,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                             },
                           });
                         }}
-                        className="w-full px-2 py-1 rounded bg-[#070E1A] border border-white/15 font-bold tabular-nums text-amber-300"
+                        className="w-full px-2 py-1 rounded bg-paper border border-ink/25 font-bold tabular-nums text-berry"
                       />
                     </label>
-                    <label className="bg-[#101E36] p-3 rounded-xl border border-white/10 space-y-1">
-                      <span className="text-slate-300 block">نجاة المختلف</span>
+                    <label className="bg-lilac p-3 rounded-xl border border-ink/25 space-y-1">
+                      <span className="text-caption block">نجاة المختلف</span>
                       <input
                         type="number"
                         min={1}
@@ -726,11 +753,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                             },
                           });
                         }}
-                        className="w-full px-2 py-1 rounded bg-[#070E1A] border border-white/15 font-bold tabular-nums text-amber-300"
+                        className="w-full px-2 py-1 rounded bg-paper border border-ink/25 font-bold tabular-nums text-berry"
                       />
                     </label>
-                    <label className="bg-[#101E36] p-3 rounded-xl border border-white/10 space-y-1">
-                      <span className="text-slate-300 block">تخمين الكلمة</span>
+                    <label className="bg-lilac p-3 rounded-xl border border-ink/25 space-y-1">
+                      <span className="text-caption block">تخمين الكلمة</span>
                       <input
                         type="number"
                         min={0}
@@ -746,22 +773,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                             },
                           });
                         }}
-                        className="w-full px-2 py-1 rounded bg-[#070E1A] border border-white/15 font-bold tabular-nums text-amber-300"
+                        className="w-full px-2 py-1 rounded bg-paper border border-ink/25 font-bold tabular-nums text-berry"
                       />
                     </label>
                   </div>
                   <button
                     type="button"
                     onClick={() => setConfig({ ...config, scoringRules: { ...DEFAULT_SCORING_RULES } })}
-                    className="text-xs text-slate-400 hover:text-teal-300 underline cursor-pointer"
+                    className="text-xs text-caption hover:text-berry underline cursor-pointer"
                   >
                     استعادة النقاط الافتراضية المتوازنة (+1 / +2 / +1)
                   </button>
                 </div>
 
                 <div className="space-y-3">
-                  <h4 className="font-bold text-base text-teal-300">خيار التصويت</h4>
-                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-[#101E36] border border-white/10 cursor-pointer">
+                  <h4 className="font-bold text-base text-berry">خيار التصويت</h4>
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-lilac border border-ink/25 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={config.allowVoteChangeBeforeClose}
@@ -770,7 +797,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                       }
                       className="mt-1 w-4 h-4 accent-teal-400"
                     />
-                    <span className="text-sm text-slate-200 leading-relaxed">
+                    <span className="text-sm text-ink leading-relaxed">
                       السماح للاعب بتغيير تصويته قبل إغلاق المرحلة (الافتراضي: التصويت نهائي بمجرد الاعتماد).
                     </span>
                   </label>
@@ -783,31 +810,31 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
           {step === 7 && (
             <div className="space-y-5">
               <div>
-                <h3 className="font-display font-bold text-2xl text-slate-50">
-                  مراجعة الإعدادات وبدء المباراة
+                <h3 className="font-display font-bold text-2xl text-ink">
+                  مراجعة الإعدادات ويلا نبلّش!
                 </h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="text-sm text-caption mt-1">
                   تأكد من تفاصيل جلستكم قبل الانطلاق.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-sm">
-                <div className="p-4 rounded-xl bg-[#101E36] border border-white/10">
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <Smartphone className="w-4 h-4 text-teal-300" />
+                <div className="p-4 rounded-xl bg-lilac border border-ink/25">
+                  <div className="text-xs text-caption flex items-center gap-1.5">
+                    <Smartphone className="w-4 h-4 text-berry" />
                     <span>وضع الأجهزة</span>
                   </div>
-                  <div className="font-bold text-base text-slate-50 mt-1">
+                  <div className="font-bold text-base text-ink mt-1">
                     {config.deviceMode === 'single_device' ? 'جهاز واحد (Pass & Play)' : 'أجهزة متعددة (غرفة خاصة)'}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[#101E36] border border-white/10">
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-300" />
+                <div className="p-4 rounded-xl bg-lilac border border-ink/25">
+                  <div className="text-xs text-caption flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-berry" />
                     <span>وضع اللعبة</span>
                   </div>
-                  <div className="font-bold text-base text-slate-50 mt-1">
+                  <div className="font-bold text-base text-ink mt-1">
                     {config.gameMode === 'classic'
                       ? 'مين مش معنا؟ (الكلاسيكي)'
                       : config.gameMode === 'confusing_pair'
@@ -816,41 +843,41 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[#101E36] border border-white/10">
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-teal-300" />
+                <div className="p-4 rounded-xl bg-lilac border border-ink/25">
+                  <div className="text-xs text-caption flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-berry" />
                     <span>المشاركون</span>
                   </div>
-                  <div className="font-bold text-base text-slate-50 mt-1 tabular-nums">
+                  <div className="font-bold text-base text-ink mt-1 tabular-nums">
                     {config.deviceMode === 'single_device'
                       ? `${playerNames.length} لاعبين (${playerNames.slice(0, 3).join('، ')}${playerNames.length > 3 ? '...' : ''})`
                       : `المضيف: ${hostName} (سينضم اللاعبون بالرمز)`}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[#101E36] border border-white/10">
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-amber-300" />
+                <div className="p-4 rounded-xl bg-lilac border border-ink/25">
+                  <div className="text-xs text-caption flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-berry" />
                     <span>الفئات والرصيد المتاح</span>
                   </div>
-                  <div className="font-bold text-base text-slate-50 mt-1 tabular-nums">
+                  <div className="font-bold text-base text-ink mt-1 tabular-nums">
                     {config.categories.length} فئات · {availablePoolCount} متاح للعب
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[#101E36] border border-white/10">
-                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-teal-300" />
+                <div className="p-4 rounded-xl bg-lilac border border-ink/25">
+                  <div className="text-xs text-caption flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-berry" />
                     <span>الجولات والمؤقت</span>
                   </div>
-                  <div className="font-bold text-base text-slate-50 mt-1 tabular-nums">
+                  <div className="font-bold text-base text-ink mt-1 tabular-nums">
                     {config.totalRounds} جولات · {config.discussionSeconds > 0 ? `${config.discussionSeconds} ثانية` : 'بلا مؤقت'}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[#101E36] border border-white/10">
-                  <div className="text-xs text-slate-400">قواعد النقاط المثبتة</div>
-                  <div className="font-bold text-sm text-amber-200 mt-1 tabular-nums">
+                <div className="p-4 rounded-xl bg-lilac border border-ink/25">
+                  <div className="text-xs text-caption">قواعد النقاط المثبتة</div>
+                  <div className="font-bold text-sm text-berry mt-1 tabular-nums">
                     اكتشاف +{config.scoringRules.classicCorrectVote} · نجاة +{config.scoringRules.classicOutlierSurvive} · تخمين +{config.scoringRules.classicOutlierGuessBonus}
                   </div>
                 </div>
@@ -868,7 +895,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
               if (step === 1) onBack();
               else setStep((s) => s - 1);
             }}
-            className="min-h-[48px] px-5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
+            className="min-h-[48px] px-5 rounded-xl bg-lilac hover:bg-lilac border border-ink/25 text-ink font-semibold inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
           >
             <ArrowRight className="w-4 h-4" />
             <span>السابق</span>
@@ -878,7 +905,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             <button
               type="button"
               onClick={handleNext}
-              className="min-h-[48px] px-7 rounded-xl bg-teal-500 hover:bg-teal-400 text-[#051019] font-extrabold inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
+              className="min-h-[48px] px-7 rounded-xl bg-mintplay hover:bg-mintplay text-ink font-extrabold inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
             >
               <span>التالي</span>
               <ChevronLeft className="w-5 h-5" />
@@ -887,7 +914,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
             <button
               type="button"
               onClick={handleFinish}
-              className="min-h-[52px] px-8 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#051019] font-display font-extrabold text-lg inline-flex items-center gap-2 shadow-[0_10px_28px_rgba(245,196,81,0.3)] cursor-pointer whitespace-nowrap"
+              className="min-h-[52px] px-8 rounded-xl bg-lemon hover:bg-lemon text-ink font-display font-extrabold text-lg inline-flex items-center gap-2 shadow-[0_10px_28px_rgba(245,196,81,0.3)] cursor-pointer whitespace-nowrap"
             >
               <span>{config.deviceMode === 'single_device' ? 'ابدأ المباراة الآن' : 'إنشاء الغرفة وبدء التجمع'}</span>
               <ChevronLeft className="w-5 h-5" />

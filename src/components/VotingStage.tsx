@@ -14,7 +14,7 @@ interface VotingStageProps {
   alreadyVotedTargetIds: string[];
   isPassAndPlay: boolean;
   voterProgressText?: string;
-  onSubmitVote: (targetIds: string[]) => void;
+  onSubmitVote: (targetIds: string[]) => void | Promise<boolean>;
 }
 
 export const VotingStage: React.FC<VotingStageProps> = ({
@@ -36,12 +36,13 @@ export const VotingStage: React.FC<VotingStageProps> = ({
 
   const requiredTargets = !isTieBreaker && gameMode === 'two_outliers' ? 2 : 1;
 
+  const voteKey = alreadyVotedTargetIds.join(',');
   useEffect(() => {
     setHandoverGate(isPassAndPlay);
     setSelectedIds(alreadyVotedTargetIds);
     setSubmitted(alreadyVotedTargetIds.length > 0);
     setError(null);
-  }, [currentVoter.id, isPassAndPlay, isTieBreaker, alreadyVotedTargetIds]);
+  }, [currentVoter.id, isPassAndPlay, isTieBreaker, voteKey]);
 
   const toggleTarget = (id: string) => {
     if (submitted && !allowVoteChange) return;
@@ -64,12 +65,12 @@ export const VotingStage: React.FC<VotingStageProps> = ({
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (selectedIds.length !== requiredTargets) {
       setError(
         requiredTargets === 2
-          ? 'اختر لاعبين اثنين مختلفين قبل تثبيت التصويت.'
-          : 'اختر لاعبًا واحدًا قبل تثبيت التصويت.'
+          ? 'اختر لاعبين اثنين مختلفين قبل ثبّت صوتك.'
+          : 'اختر لاعبًا واحدًا قبل ثبّت صوتك.'
       );
       return;
     }
@@ -79,20 +80,20 @@ export const VotingStage: React.FC<VotingStageProps> = ({
     }
     soundFx.playTap();
     setSubmitted(true);
-    onSubmitVote(selectedIds);
+    if (await onSubmitVote(selectedIds) === false) setSubmitted(false);
   };
 
   if (handoverGate) {
     return (
-      <div className="max-w-lg mx-auto w-full bg-[#0B1526] border border-white/10 rounded-3xl p-6 sm:p-8 text-center shadow-2xl space-y-6">
+      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in space-y-6">
         {voterProgressText && (
-          <p className="text-xs font-semibold text-teal-300 tabular-nums">{voterProgressText}</p>
+          <p className="text-xs font-semibold text-berry tabular-nums">{voterProgressText}</p>
         )}
         <div className="flex flex-col items-center gap-3">
           <PlayerAvatar index={currentVoter.avatarIndex} size="lg" highlighted />
-          <p className="text-sm text-slate-400">التصويت سري بالكامل</p>
-          <h2 className="font-display font-black text-2xl sm:text-3xl text-slate-50">
-            سلّم الهاتف إلى <span className="text-amber-300">{currentVoter.name}</span> للتصويت
+          <p className="text-sm text-caption">التصويت سري بالكامل</p>
+          <h2 className="font-display font-black text-2xl sm:text-3xl text-ink">
+            ناول التلفون لـ <span className="text-berry">{currentVoter.name}</span> للتصويت
           </h2>
         </div>
         <button
@@ -101,7 +102,7 @@ export const VotingStage: React.FC<VotingStageProps> = ({
             soundFx.playTap();
             setHandoverGate(false);
           }}
-          className="w-full min-h-[54px] px-6 rounded-2xl bg-teal-500 hover:bg-teal-400 text-[#051019] font-display font-extrabold text-lg cursor-pointer"
+          className="w-full min-h-[54px] px-6 rounded-2xl bg-mintplay hover:bg-mintplay text-ink font-display font-extrabold text-lg cursor-pointer"
         >
           أنا {currentVoter.name}، افتح بطاقة التصويت
         </button>
@@ -110,19 +111,19 @@ export const VotingStage: React.FC<VotingStageProps> = ({
   }
 
   return (
-    <div className="max-w-3xl mx-auto w-full bg-[#0B1526] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+    <div className="max-w-3xl mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 party-panel party-stage-in space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/25 pb-4">
         <div>
           {voterProgressText && (
-            <p className="text-xs font-semibold text-teal-300 tabular-nums">{voterProgressText}</p>
+            <p className="text-xs font-semibold text-berry tabular-nums">{voterProgressText}</p>
           )}
-          <h2 className="font-display font-black text-2xl sm:text-3xl text-slate-50 mt-0.5 flex items-center gap-2">
-            {isTieBreaker && <Scale className="w-6 h-6 text-amber-300" />}
+          <h2 className="font-display font-black text-2xl sm:text-3xl text-ink mt-0.5 flex items-center gap-2">
+            {isTieBreaker && <Scale className="w-6 h-6 text-berry" />}
             <span>
               {isTieBreaker ? 'جولة تصويت فاصلة (تعادل)' : 'بطاقة الاتهام — صوّت سرًا'}
             </span>
           </h2>
-          <p className="text-sm text-slate-300 mt-1">
+          <p className="text-sm text-caption mt-1">
             {isTieBreaker
               ? 'حصل تعادل في الأصوات! صوّتوا لاختيار واحد من المتعادلين فقط.'
               : requiredTargets === 2
@@ -133,19 +134,19 @@ export const VotingStage: React.FC<VotingStageProps> = ({
       </div>
 
       {error && (
-        <div role="alert" className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-200 text-sm flex items-center gap-2">
+        <div role="alert" className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-800 text-sm flex items-center gap-2">
           <ShieldAlert className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {submitted && !allowVoteChange ? (
-        <div className="p-8 rounded-2xl bg-[#101E36] border border-teal-400/30 text-center space-y-3">
-          <Lock className="w-10 h-10 text-teal-300 mx-auto" />
-          <h3 className="font-display font-extrabold text-xl text-slate-50">
-            تم تثبيت صوتك بسرية تامة
+        <div className="p-8 rounded-2xl bg-lilac border border-teal-400/30 text-center space-y-3">
+          <Lock className="w-10 h-10 text-berry mx-auto" />
+          <h3 className="font-display font-extrabold text-xl text-ink">
+            صوتك وصل!
           </h3>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-caption">
             لا يمكن تعديل الصوت بعد اعتماده. بانتظار انتهاء بقية اللاعبين...
           </p>
         </div>
@@ -166,28 +167,28 @@ export const VotingStage: React.FC<VotingStageProps> = ({
                   onClick={() => toggleTarget(p.id)}
                   className={`p-4 rounded-2xl border text-right transition-all flex items-center gap-3 min-h-[72px] ${
                     disabled
-                      ? 'opacity-35 cursor-not-allowed bg-[#08101E] border-white/5'
+                      ? 'opacity-35 cursor-not-allowed bg-lilac border-ink/25'
                       : selected
                       ? 'bg-amber-400/20 border-amber-400 ring-1 ring-amber-400 cursor-pointer'
-                      : 'bg-[#101E36] border-white/10 hover:border-teal-400/50 cursor-pointer'
+                      : 'bg-lilac border-ink/25 hover:border-teal-400/50 cursor-pointer'
                   }`}
                 >
                   <PlayerAvatar index={p.avatarIndex} size="md" highlighted={selected} />
                   <div className="min-w-0 flex-1">
-                    <div className="font-display font-bold text-base text-slate-50 truncate">
+                    <div className="font-display font-bold text-base text-ink truncate">
                       {p.name}
                     </div>
-                    <div className="text-xs text-slate-400 mt-0.5">
+                    <div className="text-xs text-caption mt-0.5">
                       {isSelf
                         ? 'أنت (لا تصوّت لنفسك)'
                         : disabledByTie
                         ? 'خارج التعادل'
                         : selected
                         ? 'تم اختياره'
-                        : 'اضغط للاتهام'}
+                        : 'اختاره إذا شاكّ فيه'}
                     </div>
                   </div>
-                  {selected && <Check className="w-5 h-5 text-amber-300 shrink-0" />}
+                  {selected && <Check className="w-5 h-5 text-berry shrink-0" />}
                 </button>
               );
             })}
@@ -196,9 +197,9 @@ export const VotingStage: React.FC<VotingStageProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            className="w-full min-h-[54px] px-6 rounded-2xl bg-amber-400 hover:bg-amber-300 text-[#051019] font-display font-extrabold text-lg cursor-pointer transition-colors"
+            className="w-full min-h-[54px] px-6 rounded-2xl bg-lemon hover:bg-lemon text-ink font-display font-extrabold text-lg cursor-pointer transition-colors"
           >
-            تأكيد وإرسال التصويت السري ({selectedIds.length}/{requiredTargets})
+            ثبّت صوتك ({selectedIds.length}/{requiredTargets})
           </button>
         </>
       )}

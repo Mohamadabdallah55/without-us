@@ -1,3 +1,5 @@
+import type { QuestionTurn } from '../game/questions';
+
 export type AgeBand =
   | 'children_7_10'
   | 'preteens_11_13'
@@ -16,6 +18,7 @@ export type DeviceMode = 'single_device' | 'multi_device';
 export type GamePhase =
   | 'LOBBY'
   | 'SECRET_REVEAL'
+  | 'PLAYER_QUESTIONS'
   | 'DISCUSSION'
   | 'SUSPICION_MOMENT'
   | 'VOTING'
@@ -128,6 +131,7 @@ export interface GameConfig {
   ageBand: AgeBand;
   maxDifficulty: number;
   totalRounds: number;
+  questionSeconds: number; // 0 = no timer
   discussionSeconds: number; // 0 = no timer
   allowVoteChangeBeforeClose: boolean;
   scoringRules: ScoringRules;
@@ -184,6 +188,8 @@ export interface PublicRoomState {
   config: GameConfig;
   players: PlayerPublic[];
   currentRound: number;
+  roundId: string | null;
+  questionTurn: QuestionTurn | null;
   starterPlayerId: string | null;
   starterPlayerName: string | null;
   currentCategoryId: string | null;
@@ -207,6 +213,7 @@ export interface PublicRoomState {
 export interface PlayerSecretView {
   playerId: string;
   roundNumber: number;
+  roundId: string;
   isOutlier: boolean;
   // In confusing_pair mode, UI NEVER displays isOutlier until REVEAL.
   showOutlierHint: boolean;
