@@ -21,13 +21,14 @@ import {
   upsertDiscussionCard,
   upsertWord,
 } from './server/storage';
+import { GAME_BRAND } from './src/game/brand';
 import { RoomManager } from './server/roomManager';
 import { checkWordSafety, sanitizeUserText } from './src/game/arabic';
 import { exportWordsToCsv, parseCsvWords, scanBankDuplicates } from './src/game/wordBankService';
 import type { ConfusingPairEntry, DiscussionCardEntry, WordEntry } from './src/types/game';
 
 const PORT = Number(process.env.PORT) || 3000;
-const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE || 'ibn-taymiyah-2026';
+const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE;
 const SESSION_SECRET =
   process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
@@ -80,7 +81,7 @@ async function startServer() {
   const roomManager = new RoomManager();
 
   const app = express();
-  app.set('trust proxy', 1);
+  if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 
   app.use(
     helmet({
@@ -99,7 +100,7 @@ async function startServer() {
     legacyHeaders: false,
     message: { error: 'تم تجاوز حد الطلبات المسموح، يرجى الانتظار قليلًا.' },
   });
-  app.use('/api', apiLimiter);
+  app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); }, apiLimiter);
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -107,6 +108,14 @@ async function startServer() {
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { error: 'محاولات دخول كثيرة، انتظر قليلًا.' },
+  });
+
+  const roomEntryLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60, // A shared venue IP may seat several rooms.
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'محاولات غرف كثيرة، جرّب بعد شوي.' },
   });
 
   // Public playable word bank (approved entries only — zero draft/needs_review exposure)
@@ -138,7 +147,7 @@ async function startServer() {
   });
 
   // --- Multi-Device Room APIs ---
-  app.post('/api/rooms', (req, res) => {
+  app.post('/api/rooms', roomEntryLimiter, (req, res) => {
     try {
       const { hostName, config } = req.body || {};
       const result = roomManager.createRoom({
@@ -151,7 +160,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/rooms/:code/join', (req, res) => {
+  app.post('/api/rooms/:code/join', roomEntryLimiter, (req, res) => {
     try {
       const { name, playerToken } = req.body || {};
       const result = roomManager.joinRoom({
@@ -231,17 +240,17 @@ async function startServer() {
   app.post('/api/rooms/:code/revealed', (req, res) => {
     try {
       const token = String(req.headers['x-player-token'] || '');
-      const state = roomManager.markPlayerRevealed(req.params.code, token);
+      const state = roomManager.markPlayerRevealed(req.params.code, token, String(req.body?.roundId || ''));
       res.json(state);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
   });
 
-  app.post('/api/rooms/:code/discussion/begin', (req, res) => {
+  app.post('/api/rooms/:code/questions/advance', (req, res) => {
     try {
       const hostToken = String(req.headers['x-host-token'] || '');
-      const state = roomManager.beginDiscussion(req.params.code, hostToken);
+      const state = roomManager.advanceQuestion(req.params.code, hostToken, String(req.body?.turnId || ''), req.body?.postpone === true);
       res.json(state);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
@@ -282,7 +291,7 @@ async function startServer() {
     try {
       const playerToken = String(req.headers['x-player-token'] || '');
       const targetIds = Array.isArray(req.body?.targetIds) ? req.body.targetIds.map(String) : [];
-      const state = roomManager.submitVote(req.params.code, playerToken, targetIds);
+      const state = roomManager.submitVote(req.params.code, playerToken, targetIds, String(req.body?.roundId || ''), String(req.body?.ballot || ''));
       res.json(state);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
@@ -318,7 +327,7 @@ async function startServer() {
   app.post('/api/rooms/:code/advance', (req, res) => {
     try {
       const hostToken = String(req.headers['x-host-token'] || '');
-      const state = roomManager.advanceAfterReveal(req.params.code, hostToken);
+      const state = roomManager.advanceAfterReveal(req.params.code, hostToken, String(req.body?.roundId || ''), String(req.body?.phase || ''));
       res.json(state);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
@@ -364,6 +373,10 @@ async function startServer() {
   // --- Admin Word Bank APIs ---
   app.post('/api/admin/login', authLimiter, (req, res) => {
     const passcode = String(req.body?.passcode || '');
+    if (!ADMIN_PASSCODE) {
+      res.status(503).json({ error: 'دخول المشرف مش مفعّل على هالخادم.' });
+      return;
+    }
     const a = Buffer.from(passcode);
     const b = Buffer.from(ADMIN_PASSCODE);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
@@ -545,7 +558,20 @@ async function startServer() {
 
   // --- HTTP + WebSocket Server ---
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server, path: '/ws', maxPayload: 2048,
+    verifyClient: ({ origin, req }: { origin: string; req: http.IncomingMessage }) => {
+      // Browser clients may only subscribe from this application's origin.
+      if (!origin) return true;
+      try {
+        const url = new URL(origin);
+        const forwarded = process.env.TRUST_PROXY === '1' ? req.headers['x-forwarded-host'] : undefined;
+        return url.host === (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : req.headers.host);
+      } catch {
+        return false;
+      }
+    },
+  });
 
   interface ClientMeta {
     roomCode: string;
@@ -554,30 +580,41 @@ async function startServer() {
   }
   const clientMeta = new Map<WebSocket, ClientMeta>();
 
+  const sendRoom = (ws: WebSocket, meta: ClientMeta) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const state = roomManager.getPublicRoomState(meta.roomCode);
+    if (!state) {
+      ws.send(JSON.stringify({ type: 'room:closed' }));
+      ws.close(1008);
+      return;
+    }
+    let secret;
+    if (meta.role === 'player' && meta.playerToken) {
+      try {
+        roomManager.authenticatePlayer(meta.roomCode, meta.playerToken);
+        if (state.phase !== 'LOBBY') secret = roomManager.getPlayerSecretView(meta.roomCode, meta.playerToken);
+      } catch {
+        ws.send(JSON.stringify({ type: 'room:error', error: 'جلسة الغرفة مش صالحة.' }));
+        ws.close(1008);
+        return;
+      }
+    }
+    ws.send(JSON.stringify({ type: 'room:state', state, secret }));
+  };
+
   const broadcastRoom = (roomCode: string) => {
-    const pub = roomManager.getPublicRoomState(roomCode);
-    for (const [ws, meta] of clientMeta.entries()) {
-      if (meta.roomCode !== roomCode || ws.readyState !== WebSocket.OPEN) continue;
-      if (!pub) {
-        ws.send(JSON.stringify({ type: 'room:closed' }));
-        continue;
-      }
-      ws.send(JSON.stringify({ type: 'room:state', state: pub }));
-      if (meta.role === 'player' && meta.playerToken && pub.phase !== 'LOBBY') {
-        try {
-          const secret = roomManager.getPlayerSecretView(roomCode, meta.playerToken);
-          ws.send(JSON.stringify({ type: 'player:secret', secret }));
-        } catch {
-          // Ignore if player kicked or not in round
-        }
-      }
+    for (const [ws, meta] of clientMeta) {
+      if (meta.roomCode === roomCode) sendRoom(ws, meta);
     }
   };
 
   roomManager.onRoomUpdated(broadcastRoom);
 
   wss.on('connection', (ws) => {
-    ws.on('message', (raw) => {
+    // A socket can subscribe once. Unused connections do not stay open.
+    const handshake = setTimeout(() => { if (!clientMeta.has(ws)) ws.close(1008); }, 5000);
+    ws.on('error', () => ws.terminate());
+    ws.once('message', (raw) => {
       try {
         const msg = JSON.parse(raw.toString()) as {
           type?: string;
@@ -588,6 +625,12 @@ async function startServer() {
         if (msg.type === 'subscribe' && msg.roomCode) {
           const code = msg.roomCode.trim().toUpperCase();
           const role = msg.role === 'projector' ? 'projector' : 'player';
+          if (role === 'player') roomManager.authenticatePlayer(code, String(msg.playerToken || ''));
+          if (!roomManager.getPublicRoomState(code)) {
+            ws.send(JSON.stringify({ type: 'room:error', error: 'الغرفة غير موجودة.' }));
+            ws.close(1008);
+            return;
+          }
           clientMeta.set(ws, {
             roomCode: code,
             playerToken: role === 'player' ? msg.playerToken : undefined,
@@ -596,30 +639,20 @@ async function startServer() {
           if (role === 'player' && msg.playerToken) {
             roomManager.setPlayerConnection(code, msg.playerToken, true);
           }
-          const pub = roomManager.getPublicRoomState(code);
-          if (pub) {
-            ws.send(JSON.stringify({ type: 'room:state', state: pub }));
-            if (role === 'player' && msg.playerToken && pub.phase !== 'LOBBY') {
-              try {
-                const secret = roomManager.getPlayerSecretView(code, msg.playerToken);
-                ws.send(JSON.stringify({ type: 'player:secret', secret }));
-              } catch {
-                // ignore
-              }
-            }
-          } else {
-            ws.send(JSON.stringify({ type: 'room:error', error: 'الغرفة غير موجودة.' }));
-          }
+          sendRoom(ws, clientMeta.get(ws)!);
         }
       } catch {
-        // Ignore malformed packets
+        ws.send(JSON.stringify({ type: 'room:error', error: 'جلسة الغرفة مش صالحة.' }));
+        ws.close(1008);
       }
     });
 
     ws.on('close', () => {
+      clearTimeout(handshake);
       const meta = clientMeta.get(ws);
       clientMeta.delete(ws);
-      if (meta?.role === 'player' && meta.playerToken) {
+      if (meta?.role === 'player' && meta.playerToken && ![...clientMeta.values()].some((other) =>
+        other.roomCode === meta.roomCode && other.playerToken === meta.playerToken)) {
         roomManager.setPlayerConnection(meta.roomCode, meta.playerToken, false);
       }
     });
@@ -628,7 +661,7 @@ async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     const distDir = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distDir));
-    app.get('/{*splat}', (_req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distDir, 'index.html'));
     });
   } else {
@@ -640,7 +673,7 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Ho Maana server listening on http://localhost:${PORT}`);
+    console.log(`${GAME_BRAND.name} server listening on http://localhost:${PORT}`);
   });
 }
 

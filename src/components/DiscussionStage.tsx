@@ -43,21 +43,21 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
       {/* Final Round Special Banner */}
       {isFinalRound && (
         <div className="p-3.5 rounded-2xl bg-gradient-to-l from-amber-500/20 via-amber-400/15 to-transparent border border-amber-400/50 text-center">
-          <p className="font-display font-extrabold text-amber-300 text-base sm:text-lg">
+          <p className="font-display font-extrabold text-berry text-base sm:text-lg">
             الجولة الأخيرة — جولة الحسم!
           </p>
         </div>
       )}
 
       {/* Main Discussion Card */}
-      <div className="bg-[#0B1526] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+      <div className="bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 party-panel party-stage-in space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/25 pb-4">
           <div>
-            <p className="text-xs text-slate-400 tabular-nums">
-              الجولة {currentRound} من {totalRounds} · الفئة: <strong className="text-teal-300">{categoryNameAr}</strong>
+            <p className="text-xs text-caption tabular-nums">
+              الجولة {currentRound} من {totalRounds} · الفئة: <strong className="text-berry">{categoryNameAr}</strong>
             </p>
-            <h2 className="font-display font-black text-2xl sm:text-3xl text-slate-50 mt-1">
-              مرحلة النقاش والأسئلة
+            <h2 className="font-display font-black text-2xl sm:text-3xl text-ink mt-1">
+              احكوا عراحتكم!
             </h2>
           </div>
 
@@ -65,7 +65,7 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
             <button
               type="button"
               onClick={onSkipWord}
-              className="min-h-[40px] px-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="min-h-[40px] px-3.5 rounded-xl bg-lilac hover:bg-lilac border border-ink/25 text-xs font-semibold text-caption inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>تخطي الكلمة</span>
@@ -75,11 +75,11 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
 
         {/* Starter Player Highlight */}
         {starterPlayer && (
-          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-[#101E36] border border-teal-400/30">
+          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-lilac border border-teal-400/30">
             <PlayerAvatar index={starterPlayer.avatarIndex} size="md" highlighted />
             <div>
-              <p className="text-xs text-teal-300 font-semibold">يبدأ النقاش في هذه الجولة:</p>
-              <p className="font-display font-extrabold text-xl text-slate-50">{starterPlayer.name}</p>
+              <p className="text-xs text-berry font-semibold">يبدأ النقاش في هذه الجولة:</p>
+              <p className="font-display font-extrabold text-xl text-ink">{starterPlayer.name}</p>
             </div>
           </div>
         )}
@@ -90,29 +90,29 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
             <>
               <div
                 className={`font-display font-black text-6xl sm:text-7xl tabular-nums transition-colors ${
-                  isLow ? 'text-rose-400' : timerPaused ? 'text-amber-300' : 'text-teal-300'
+                  isLow ? 'text-rose-800' : timerPaused ? 'text-berry' : 'text-berry'
                 }`}
               >
                 {timerRemaining}
-                <span className="text-xl font-bold text-slate-400 mr-2">ث</span>
+                <span className="text-xl font-bold text-caption mr-2">ث</span>
               </div>
-              <div className="w-full h-3 rounded-full bg-[#070E1A] overflow-hidden border border-white/10">
+              <div className="w-full h-3 rounded-full bg-paper overflow-hidden border border-ink/25">
                 <div
                   className={`h-full transition-all duration-300 ${
-                    isLow ? 'bg-rose-400' : 'bg-teal-400'
+                    isLow ? 'bg-rose-400' : 'bg-mintplay'
                   }`}
                   style={{ width: `${pct}%` }}
                 />
               </div>
               {timerPaused && (
-                <p className="text-xs font-bold text-amber-300">الوقت متوقف مؤقتًا من قِبل المشرف</p>
+                <p className="text-xs font-bold text-berry">الوقت متوقف مؤقتًا من قِبل المشرف</p>
               )}
               {timerRemaining === 0 && (
-                <p className="text-sm font-bold text-rose-300">انتهى وقت النقاش! انتقلوا إلى التصويت.</p>
+                <p className="text-sm font-bold text-rose-800">انتهى وقت النقاش! انتقلوا إلى التصويت.</p>
               )}
             </>
           ) : (
-            <div className="py-4 inline-flex items-center gap-2 text-teal-300 font-bold text-lg">
+            <div className="py-4 inline-flex items-center gap-2 text-berry font-bold text-lg">
               <Timer className="w-6 h-6" />
               <span>نقاش مفتوح بلا مؤقت</span>
             </div>
@@ -121,11 +121,11 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
 
         {/* Discussion Prompt Card */}
         {activeCard && (
-          <div className="p-5 rounded-2xl bg-[#11223D] border border-amber-400/45 space-y-2 text-center">
-            <p className="text-xs font-bold text-amber-300 tabular-nums">
-              بطاقة تنشيط النقاش · {activeCard.id}
+          <div className="p-5 rounded-2xl bg-lilac border border-amber-400/45 space-y-2 text-center">
+            <p className="text-xs font-bold text-berry tabular-nums">
+              سؤال مساعد
             </p>
-            <p className="font-display font-bold text-xl sm:text-2xl text-slate-50 leading-relaxed">
+            <p className="font-display font-bold text-xl sm:text-2xl text-ink leading-relaxed">
               «{activeCard.prompt_ar}»
             </p>
           </div>
@@ -137,9 +137,9 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
             <button
               type="button"
               onClick={onDrawCard}
-              className="min-h-[52px] px-4 rounded-2xl bg-[#101E36] hover:bg-[#162947] border border-amber-400/40 text-amber-200 font-bold inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              className="min-h-[52px] px-4 rounded-2xl bg-lilac hover:bg-lilac border border-amber-400/40 text-berry font-bold inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
             >
-              <HelpCircle className="w-5 h-5 text-amber-300" />
+              <HelpCircle className="w-5 h-5 text-berry" />
               <span>بطاقة نقاش</span>
             </button>
 
@@ -147,16 +147,16 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
               <button
                 type="button"
                 onClick={onTogglePause}
-                className="min-h-[52px] px-4 rounded-2xl bg-[#101E36] hover:bg-[#162947] border border-white/15 text-slate-200 font-bold inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                className="min-h-[52px] px-4 rounded-2xl bg-lilac hover:bg-lilac border border-ink/25 text-ink font-bold inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
               >
                 {timerPaused ? (
                   <>
-                    <Play className="w-5 h-5 text-teal-300" />
+                    <Play className="w-5 h-5 text-berry" />
                     <span>استئناف الوقت</span>
                   </>
                 ) : (
                   <>
-                    <Pause className="w-5 h-5 text-amber-300" />
+                    <Pause className="w-5 h-5 text-berry" />
                     <span>إيقاف الوقت</span>
                   </>
                 )}
@@ -168,15 +168,15 @@ export const DiscussionStage: React.FC<DiscussionStageProps> = ({
             <button
               type="button"
               onClick={onStartVoting}
-              className="min-h-[52px] px-5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-[#051019] font-display font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              className="min-h-[52px] px-5 rounded-2xl bg-mintplay hover:bg-mintplay text-ink font-display font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
             >
               <Vote className="w-5 h-5" />
-              <span>بدء التصويت</span>
+              <span>خلص الحكي… صوّتوا!</span>
               <SkipForward className="w-4 h-4" />
             </button>
           </div>
         ) : (
-          <p className="text-center text-sm text-slate-400">
+          <p className="text-center text-sm text-caption">
             ناقشوا الكلمة وجهًا لوجه — سيفعّل المضيف التصويت عند انتهاء النقاش.
           </p>
         )}

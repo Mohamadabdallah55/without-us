@@ -1,3 +1,4 @@
+import { GAME_BRAND } from './src/game/brand.ts';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -5,10 +6,14 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), {
+      name: 'game-brand',
+      transformIndexHtml: (html) => html.replaceAll('%GAME_NAME%', GAME_BRAND.name)
+        .replaceAll('%GAME_SLOGAN%', GAME_BRAND.slogan),
+    }],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {

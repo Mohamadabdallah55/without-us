@@ -38,6 +38,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   ageBand: 'families_mixed',
   maxDifficulty: 3,
   totalRounds: 5,
+  questionSeconds: 30,
   discussionSeconds: 60,
   allowVoteChangeBeforeClose: false,
   scoringRules: { ...DEFAULT_SCORING_RULES },
@@ -111,35 +112,46 @@ export function validateMatchStart(
     };
   }
 
-  if (config.gameMode === 'confusing_pair') {
-    const pairs = filterPairsForPlay(bank, {
-      categories: config.categories,
-      ageBand: config.ageBand,
-      maxDifficulty: config.maxDifficulty,
-      playedPairIdsHistory: [],
-    });
-    if (pairs.length === 0) {
-      return {
-        valid: false,
-        error: 'لا توجد أزواج متشابهة معتمدة مطابقة للفئات والعمر المختار. وسّع الفئات أو مستوى الصعوبة.',
-      };
-    }
-  } else {
-    const words = filterWordsForPlay(bank, {
-      categories: config.categories,
-      ageBand: config.ageBand,
-      maxDifficulty: config.maxDifficulty,
-      playedIdsHistory: [],
-    });
-    if (words.length === 0) {
-      return {
-        valid: false,
-        error: 'لا توجد كلمات معتمدة مطابقة للفئات والعمر المختار.',
-      };
-    }
+  if (!hasRoundCapacity(config, bank, config.totalRounds)) {
+    return { valid: false, error: 'الكلمات المتاحة ما بتكفي للجولات بدون تكرار. وسّع الفئات أو قلّل الجولات.' };
   }
 
   return { valid: true };
+}
+
+function eligibleRoundItems(config: GameConfig, bank: WordBankData, usedWords: string[], usedPairs: string[]) {
+  const { categories, ageBand, maxDifficulty } = config;
+  const words = filterWordsForPlay(bank, { categories, ageBand, maxDifficulty, playedIdsHistory: usedWords });
+  const seen = new Set<string>();
+  const wordText = new Map(bank.words.map((word) => [word.id, normalizeArabic(word.text_ar)]));
+  for (const id of usedWords) {
+    const text = wordText.get(id);
+    if (text) seen.add(text);
+  }
+  const uniqueWords = words.filter((word) => {
+    const key = wordText.get(word.id)!;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  // Reserve disjoint pairs, including across categories and normalized spellings.
+  const pairWords = new Set(usedWords.map((id) => wordText.get(id)));
+  const pairs = config.gameMode === 'confusing_pair' ? filterPairsForPlay(bank, {
+    categories, ageBand, maxDifficulty, playedPairIdsHistory: usedPairs,
+  }).filter((pair) => {
+    const a = wordText.get(pair.word_a_id);
+    const b = wordText.get(pair.word_b_id);
+    if (!a || !b || a === b || pairWords.has(a) || pairWords.has(b)) return false;
+    pairWords.add(a);
+    pairWords.add(b);
+    return true;
+  }) : [];
+  return { words: uniqueWords, pairs };
+}
+
+export function hasRoundCapacity(config: GameConfig, bank: WordBankData, rounds: number, usedWords: string[] = [], usedPairs: string[] = []) {
+  const { words, pairs } = eligibleRoundItems(config, bank, usedWords, usedPairs);
+  return (config.gameMode === 'confusing_pair' ? pairs.length : words.length) >= rounds;
 }
 
 export interface SecretRoundAssignment {
@@ -150,6 +162,7 @@ export interface SecretRoundAssignment {
   wordA: string;
   wordB?: string;
   wordIdUsed: string;
+  secondWordIdUsed?: string;
   pairIdUsed?: string;
   reasonAr?: string;
   outlierIds: string[];
@@ -175,23 +188,13 @@ export function createRoundAssignment(params: {
   const starterPlayer = players[(roundNumber - 1) % players.length];
   const shuffledPlayers = shuffleSecure(players);
 
+  const pool = eligibleRoundItems(config, bank, playedWordIds, playedPairIds);
   if (config.gameMode === 'confusing_pair') {
-    let eligiblePairs = filterPairsForPlay(bank, {
-      categories: config.categories,
-      ageBand: config.ageBand,
-      maxDifficulty: config.maxDifficulty,
-      playedPairIdsHistory: playedPairIds,
-    });
-    if (eligiblePairs.length === 0) {
-      // Fallback only if all eligible pairs in selected filters were exhausted
-      eligiblePairs = filterPairsForPlay(bank, {
-        categories: config.categories,
-        ageBand: config.ageBand,
-        maxDifficulty: config.maxDifficulty,
-        playedPairIdsHistory: [],
-      });
-    }
-    const pair = pickRandomItem(eligiblePairs);
+    const remaining = config.totalRounds - roundNumber;
+    const safePairs = pool.pairs.filter((pair) => hasRoundCapacity(config, bank, remaining,
+      [...playedWordIds, pair.word_a_id, pair.word_b_id], [...playedPairIds, pair.id]));
+    if (!safePairs.length) throw new Error('ما ضل أزواج كافية بدون تكرار.');
+    const pair = pickRandomItem(safePairs);
     const wordMap = new Map(bank.words.map((w) => [w.id, w]));
     const wA = wordMap.get(pair.word_a_id)!;
     const wB = wordMap.get(pair.word_b_id)!;
@@ -215,6 +218,7 @@ export function createRoundAssignment(params: {
       wordA: majorityWord,
       wordB: outlierWord,
       wordIdUsed: wA.id,
+      secondWordIdUsed: wB.id,
       pairIdUsed: pair.id,
       reasonAr: pair.reason_ar,
       outlierIds: [outlier.id],
@@ -224,22 +228,8 @@ export function createRoundAssignment(params: {
   }
 
   // Classic or Two Outliers
-  let eligibleWords = filterWordsForPlay(bank, {
-    categories: config.categories,
-    ageBand: config.ageBand,
-    maxDifficulty: config.maxDifficulty,
-    playedIdsHistory: playedWordIds,
-  });
-  if (eligibleWords.length === 0) {
-    eligibleWords = filterWordsForPlay(bank, {
-      categories: config.categories,
-      ageBand: config.ageBand,
-      maxDifficulty: config.maxDifficulty,
-      playedIdsHistory: [],
-    });
-  }
-
-  const chosenWord = pickRandomItem(eligibleWords);
+  if (!pool.words.length) throw new Error('ما ضل كلمات متاحة بدون تكرار.');
+  const chosenWord = pickRandomItem(pool.words);
   const outlierCount = config.gameMode === 'two_outliers' ? 2 : 1;
   const outlierIds = shuffledPlayers.slice(0, outlierCount).map((p) => p.id);
   const outlierSet = new Set(outlierIds);
@@ -356,6 +346,7 @@ export function evaluateVotingOutcome(params: {
   players: Array<{ id: string }>;
   gameMode: GameMode;
   isTieBreakerRound: boolean;
+  securedAccusedIds?: string[];
 }): {
   needsTieBreaker: boolean;
   tieCandidateIds: string[];
@@ -366,29 +357,19 @@ export function evaluateVotingOutcome(params: {
   const { tally, topCandidates } = tallyVotes(votes, players);
 
   if (gameMode === 'two_outliers') {
-    // Sort players by vote count desc and pick top 2 accused (if >0 votes)
-    const sorted = Object.entries(tally)
-      .filter(([, count]) => count > 0)
-      .sort((a, b) => b[1] - a[1]);
-
-    if (!isTieBreakerRound && sorted.length >= 3 && sorted[1][1] === sorted[2][1]) {
-      const tiedScore = sorted[1][1];
-      const tiedForSecond = sorted.filter(([, c]) => c === tiedScore).map(([id]) => id);
-      if (tiedForSecond.length > 1) {
-        return {
-          needsTieBreaker: true,
-          tieCandidateIds: tiedForSecond,
-          accusedIds: [],
-          tally,
-        };
+    const accusedIds = [...(params.securedAccusedIds ?? [])];
+    const levels = [...new Set(Object.values(tally))].filter((n) => n > 0).sort((a, b) => b - a);
+    for (const level of levels) {
+      const group = Object.keys(tally).filter((id) => tally[id] === level && !accusedIds.includes(id));
+      const slots = 2 - accusedIds.length;
+      if (slots === 0) break;
+      if (group.length > slots) {
+        if (!isTieBreakerRound) return { needsTieBreaker: true, tieCandidateIds: group, accusedIds, tally };
+        break; // Still tied at the cutoff: leave the unresolved slot(s) empty.
       }
+      accusedIds.push(...group);
     }
-    return {
-      needsTieBreaker: false,
-      tieCandidateIds: [],
-      accusedIds: sorted.slice(0, 2).map(([id]) => id),
-      tally,
-    };
+    return { needsTieBreaker: false, tieCandidateIds: [], accusedIds, tally };
   }
 
   // Classic or Confusing Pair (1 outlier)
@@ -566,9 +547,11 @@ export function finalizeRoundSummary(params: {
 export function pickDiscussionCardForRound(
   bank: WordBankData,
   categoryId: string,
-  usedIds: string[]
+  usedIds: string[],
+  ageBand?: GameConfig['ageBand']
 ) {
-  const pool = filterDiscussionCardsForCategory(bank, categoryId, usedIds);
+  const eligibleBank = ageBand ? { ...bank, discussion_cards: bank.discussion_cards.filter((card) => card.age_bands.includes(ageBand)) } : bank;
+  const pool = filterDiscussionCardsForCategory(eligibleBank, categoryId, usedIds);
   if (pool.length === 0) return null;
   return pickRandomItem(pool);
 }

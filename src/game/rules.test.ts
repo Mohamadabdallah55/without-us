@@ -1,3 +1,4 @@
+import { createMatchups, postponeMatchup, secondsLeft, timerDeadline } from './questions';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkWordSafety, normalizeArabic } from './arabic';
@@ -316,6 +317,11 @@ test('Multi-device RoomManager enforces secret isolation, reconnects without dup
   ];
 
   for (let round = 1; round <= 3; round++) {
+    const roundId = rm.getPublicRoomState(created.roomCode)!.roundId!;
+    const before = rm.getPublicRoomState(created.roomCode)!;
+    assert.equal(before.phase, 'SECRET_REVEAL');
+    assert.throws(() => rm.advanceQuestion(created.roomCode, created.hostToken, 'early'));
+    assert.throws(() => rm.markPlayerRevealed(created.roomCode, created.playerToken, 'stale'));
     let outlierCount = 0;
     let majorityWord = '';
     for (const p of allTokens) {
@@ -327,7 +333,7 @@ test('Multi-device RoomManager enforces secret isolation, reconnects without dup
         assert.ok(secret.secretWord && secret.secretWord.length > 0);
         majorityWord = secret.secretWord;
       }
-      rm.markPlayerRevealed(created.roomCode, p.playerToken);
+      rm.markPlayerRevealed(created.roomCode, p.playerToken, roundId);
     }
     assert.equal(outlierCount, 1);
     assert.ok(majorityWord.length > 0);
@@ -335,7 +341,26 @@ test('Multi-device RoomManager enforces secret isolation, reconnects without dup
     // Cannot jump straight to REVEAL without discussion & voting
     assert.throws(() => rm.advanceAfterReveal(created.roomCode, created.hostToken));
 
-    rm.beginDiscussion(created.roomCode, created.hostToken);
+    const firstTurn = rm.getPublicRoomState(created.roomCode)!.questionTurn!;
+    assert.ok(firstTurn);
+    assert.throws(() => rm.advanceQuestion(created.roomCode, joined[0].playerToken, firstTurn.id));
+    assert.throws(() => rm.beginVoting(created.roomCode, created.hostToken));
+    assert.equal(rm.getPlayerSecretView(created.roomCode, created.playerToken).secretWord, null);
+    let questions = rm.advanceQuestion(created.roomCode, created.hostToken, firstTurn.id, true);
+    assert.notEqual(questions.questionTurn?.id, firstTurn.id);
+    const askers = new Set<string>();
+    const answerers = new Set<string>();
+    while (questions.questionTurn) {
+      const turn = questions.questionTurn;
+      assert.notEqual(turn.askerId, turn.answererId);
+      askers.add(turn.askerId);
+      answerers.add(turn.answererId);
+      questions = rm.advanceQuestion(created.roomCode, created.hostToken, turn.id);
+      assert.throws(() => rm.advanceQuestion(created.roomCode, created.hostToken, turn.id));
+    }
+    assert.equal(questions.phase, 'DISCUSSION');
+    assert.equal(askers.size, 8);
+    assert.equal(answerers.size, 8);
     rm.drawDiscussionCard(created.roomCode, created.hostToken);
     rm.beginVoting(created.roomCode, created.hostToken);
 
@@ -343,7 +368,8 @@ test('Multi-device RoomManager enforces secret isolation, reconnects without dup
     for (let i = 0; i < allTokens.length; i++) {
       const voter = allTokens[i];
       const target = i < 3 ? allTokens[3].id : allTokens[0].id;
-      rm.submitVote(created.roomCode, voter.playerToken, [target]);
+      rm.submitVote(created.roomCode, voter.playerToken, [target], roundId, 'VOTING');
+      assert.throws(() => rm.submitVote(created.roomCode, voter.playerToken, [target], roundId, 'VOTING'));
     }
 
     const afterClose = rm.closeVoting(created.roomCode, created.hostToken);
@@ -353,6 +379,8 @@ test('Multi-device RoomManager enforces secret isolation, reconnects without dup
     const revealed = rm.getPublicRoomState(created.roomCode)!;
     assert.equal(revealed.phase, 'REVEAL');
     assert.ok(revealed.lastReveal?.wordA);
+    assert.throws(() => rm.closeVoting(created.roomCode, created.hostToken));
+    assert.throws(() => rm.skipWord(created.roomCode, created.hostToken));
 
     const next = rm.advanceAfterReveal(created.roomCode, created.hostToken);
     if (round < 3) {
@@ -364,4 +392,67 @@ test('Multi-device RoomManager enforces secret isolation, reconnects without dup
   }
 
   rm.destroy();
+});
+
+test('Every room size has a full cycle without self-matches, reverse duplicates or skipped turns', () => {
+  for (let size = 3; size <= 12; size++) {
+    const ids = Array.from({ length: size }, (_, i) => String(i));
+    const schedule = createMatchups(ids);
+    assert.deepEqual(schedule.map((turn) => turn.askerId).sort(), [...ids].sort());
+    assert.deepEqual(schedule.map((turn) => turn.answererId).sort(), [...ids].sort());
+    assert.equal(new Set(schedule.map(({ askerId, answererId }) => [askerId, answererId].sort().join(':'))).size, size);
+    assert.ok(schedule.every(({ askerId, answererId }) => askerId !== answererId));
+    assert.deepEqual(postponeMatchup(schedule, 1), [schedule[0], ...schedule.slice(2), schedule[1]]);
+  }
+  assert.equal(timerDeadline(0, 1000), null);
+  assert.equal(secondsLeft(timerDeadline(30, 1000), 12600), 19);
+  assert.equal(secondsLeft(timerDeadline(30, 1000), 40000), 0);
+});
+
+test('Two-outlier runoff keeps the clear leader and leaves a repeated tie unresolved', () => {
+  const players = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));
+  const initial = evaluateVotingOutcome({
+    players, gameMode: 'two_outliers', isTieBreakerRound: false,
+    votes: { a: ['b', 'c'], b: ['a', 'd'], c: ['a', 'd'], d: ['a', 'b'], e: ['a', 'c'] },
+  });
+  assert.deepEqual(initial.accusedIds, ['a']);
+  assert.deepEqual(initial.tieCandidateIds, ['b', 'c', 'd']);
+  const runoff = (votes: Record<string, string[]>) => evaluateVotingOutcome({
+    players, gameMode: 'two_outliers', isTieBreakerRound: true, securedAccusedIds: initial.accusedIds, votes,
+  });
+  assert.deepEqual(runoff({ a: ['b'], d: ['b'], b: ['c'] }).accusedIds, ['a', 'b']);
+  assert.deepEqual(runoff({ a: ['b'], b: ['c'] }).accusedIds, ['a']);
+});
+
+test('Confusing pairs do not reuse either word and respect the selected age and difficulty', () => {
+  const { bank } = buildInitialBankFromPdfSeed();
+  const config = { ...DEFAULT_GAME_CONFIG, gameMode: 'confusing_pair' as const, totalRounds: 7 };
+  const playedWordIds: string[] = [];
+  const playedPairIds: string[] = [];
+  const texts = new Set<string>();
+  for (let roundNumber = 1; roundNumber <= config.totalRounds; roundNumber++) {
+    const assignment = createRoundAssignment({ roundNumber, players: makePlayers(3), config, bank, playedWordIds, playedPairIds });
+    const ids = [assignment.wordIdUsed, assignment.secondWordIdUsed!];
+    for (const id of ids) {
+      const word = bank.words.find((w) => w.id === id)!;
+      assert.ok(word.age_bands.includes(config.ageBand));
+      assert.ok(word.difficulty <= config.maxDifficulty);
+      assert.ok(!texts.has(normalizeArabic(word.text_ar)));
+      texts.add(normalizeArabic(word.text_ar));
+    }
+    playedWordIds.push(...ids);
+    playedPairIds.push(assignment.pairIdUsed!);
+  }
+});
+
+test('An exhausted bank rejects a match or reroll instead of silently reusing the word', () => {
+  const { bank } = buildInitialBankFromPdfSeed();
+  const config = { ...DEFAULT_GAME_CONFIG, totalRounds: 1 };
+  const word = bank.words.find((w) => w.status === 'approved' && config.categories.includes(w.category) &&
+    w.difficulty <= config.maxDifficulty && w.age_bands.includes(config.ageBand))!;
+  const smallBank = { ...bank, words: [word] };
+  assert.equal(validateMatchStart(3, { ...config, totalRounds: 2 }, smallBank).valid, false);
+  assert.throws(() => createRoundAssignment({
+    roundNumber: 1, players: makePlayers(3), config, bank: smallBank, playedWordIds: [word.id], playedPairIds: [],
+  }));
 });

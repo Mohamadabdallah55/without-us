@@ -1,3 +1,4 @@
+import { GAME_BRAND } from './brand';
 import { checkWordSafety, normalizeArabic } from './arabic';
 import {
   OFFICIAL_CATEGORIES,
@@ -138,8 +139,8 @@ export function buildInitialBankFromPdfSeed(): { bank: WordBankData; report: Imp
 
   const bank: WordBankData = {
     metadata: {
-      game_name_ar: 'هو معنا... بس مش معنا!',
-      organization: 'مكتبة الألعاب الدائمة — مسجد ابن تيمية (الأردن)',
+      game_name_ar: GAME_BRAND.name,
+      organization: GAME_BRAND.publisher,
       version: '1.0.0-pdf-verified',
       encoding: 'UTF-8',
       direction: 'RTL',
@@ -331,7 +332,8 @@ export function filterPairsForPlay(
     if (!pair.age_bands.includes(opts.ageBand)) return false;
     const wA = wordMap.get(pair.word_a_id);
     const wB = wordMap.get(pair.word_b_id);
-    return Boolean(wA && wB && wA.status === 'approved' && wB.status === 'approved');
+    return [wA, wB].every((word) => word?.status === 'approved' &&
+      word.age_bands.includes(opts.ageBand) && word.difficulty <= opts.maxDifficulty);
   });
 }
 

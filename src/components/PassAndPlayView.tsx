@@ -5,8 +5,13 @@ import {
   createRoundAssignment,
   evaluateVotingOutcome,
   finalizeRoundSummary,
+  hasRoundCapacity,
+  validateVoteSubmission,
   pickDiscussionCardForRound,
 } from '../game/rules';
+import { createMatchups, getQuestionTurn, postponeMatchup, secondsLeft, timerDeadline, type Matchup } from '../game/questions';
+import { LOCAL_MATCH_KEY, readSession, writeSession } from '../game/session';
+import { QuestionStage } from './QuestionStage';
 import { soundFx } from '../utils/sound';
 import type {
   DiscussionCardEntry,
@@ -29,14 +34,47 @@ interface PassAndPlayViewProps {
   onExitHome: () => void;
 }
 
+interface LocalMatch {
+  config: GameConfig;
+  playerNames: string[];
+  players: PlayerPublic[];
+  phase: GamePhase;
+  currentRound: number;
+  playedWordIds: string[];
+  playedPairIds: string[];
+  assignment: SecretRoundAssignment;
+  revealIndex: number;
+  timerEndsAt: number | null;
+  pausedSeconds: number | null;
+  activeCard: DiscussionCardEntry | null;
+  usedCardIds: string[];
+  matchups: Matchup[];
+  questionIndex: number;
+  voterIndex: number;
+  votes: Record<string, string[]>;
+  tieCandidateIds: string[];
+  securedAccusedIds: string[];
+  initialVotes: Record<string, string[]> | null;
+  initialTally: Record<string, number> | null;
+  pendingAccusedIds: string[];
+  pendingTally: Record<string, number>;
+  lastReveal: RoundRevealSummary | null;
+  previousLeaderId: string | null;
+}
+
+export function readLocalMatch() {
+  return readSession<LocalMatch>(LOCAL_MATCH_KEY);
+}
+
 export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
   bank,
   config,
   playerNames,
   onExitHome,
 }) => {
+  const [saved] = useState(readLocalMatch);
   const [players, setPlayers] = useState<PlayerPublic[]>(() =>
-    playerNames.map((name, idx) => ({
+    saved?.players ?? playerNames.map((name, idx) => ({
       id: `local-${idx + 1}`,
       name,
       avatarIndex: idx % 12,
@@ -48,12 +86,12 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     }))
   );
 
-  const [phase, setPhase] = useState<GamePhase>('SECRET_REVEAL');
-  const [currentRound, setCurrentRound] = useState<number>(1);
-  const [playedWordIds, setPlayedWordIds] = useState<string[]>([]);
-  const [playedPairIds, setPlayedPairIds] = useState<string[]>([]);
+  const [phase, setPhase] = useState<GamePhase>(saved?.phase ?? 'SECRET_REVEAL');
+  const [currentRound, setCurrentRound] = useState<number>(saved?.currentRound ?? 1);
+  const [playedWordIds, setPlayedWordIds] = useState<string[]>(saved?.playedWordIds ?? []);
+  const [playedPairIds, setPlayedPairIds] = useState<string[]>(saved?.playedPairIds ?? []);
   const [assignment, setAssignment] = useState<SecretRoundAssignment>(() =>
-    createRoundAssignment({
+    saved?.assignment ?? createRoundAssignment({
       roundNumber: 1,
       players: playerNames.map((name, idx) => ({ id: `local-${idx + 1}`, name })),
       config,
@@ -63,65 +101,70 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     })
   );
 
-  const [revealIndex, setRevealIndex] = useState(0);
-  const [timerRemaining, setTimerRemaining] = useState(config.discussionSeconds);
-  const [timerPaused, setTimerPaused] = useState(false);
-  const [activeCard, setActiveCard] = useState<DiscussionCardEntry | null>(null);
-  const [usedCardIds, setUsedCardIds] = useState<string[]>([]);
+  const [revealIndex, setRevealIndex] = useState(saved?.revealIndex ?? 0);
+  const [timerEndsAt, setTimerEndsAt] = useState(saved?.timerEndsAt ?? null);
+  const [pausedSeconds, setPausedSeconds] = useState(saved?.pausedSeconds ?? null);
+  const [timerRemaining, setTimerRemaining] = useState(() => saved?.pausedSeconds ?? secondsLeft(saved?.timerEndsAt ?? null));
+  const timerPaused = pausedSeconds !== null;
+  const [matchups, setMatchups] = useState<Matchup[]>(saved?.matchups ?? []);
+  const [questionIndex, setQuestionIndex] = useState(saved?.questionIndex ?? 0);
+  const questionTurn = getQuestionTurn(assignment.wordIdUsed, matchups, questionIndex);
+  const [activeCard, setActiveCard] = useState<DiscussionCardEntry | null>(saved?.activeCard ?? null);
+  const [usedCardIds, setUsedCardIds] = useState<string[]>(saved?.usedCardIds ?? []);
   const [suspicionLeft, setSuspicionLeft] = useState(2);
 
-  const [voterIndex, setVoterIndex] = useState(0);
-  const [votes, setVotes] = useState<Record<string, string[]>>({});
-  const [isTieBreaker, setIsTieBreaker] = useState(false);
-  const [tieCandidateIds, setTieCandidateIds] = useState<string[]>([]);
-  const [pendingAccusedIds, setPendingAccusedIds] = useState<string[]>([]);
-  const [pendingTally, setPendingTally] = useState<Record<string, number>>({});
-  const [lastReveal, setLastReveal] = useState<RoundRevealSummary | null>(null);
-  const [previousLeaderId, setPreviousLeaderId] = useState<string | null>(null);
+  const [voterIndex, setVoterIndex] = useState(saved?.voterIndex ?? 0);
+  const [votes, setVotes] = useState<Record<string, string[]>>(saved?.votes ?? {});
+  const isTieBreaker = phase === 'TIE_BREAKER';
+  const [securedAccusedIds, setSecuredAccusedIds] = useState<string[]>(saved?.securedAccusedIds ?? []);
+  const [initialVotes, setInitialVotes] = useState<Record<string, string[]> | null>(saved?.initialVotes ?? null);
+  const [initialTally, setInitialTally] = useState<Record<string, number> | null>(saved?.initialTally ?? null);
+  const [tieCandidateIds, setTieCandidateIds] = useState<string[]>(saved?.tieCandidateIds ?? []);
+  const [pendingAccusedIds, setPendingAccusedIds] = useState<string[]>(saved?.pendingAccusedIds ?? []);
+  const [pendingTally, setPendingTally] = useState<Record<string, number>>(saved?.pendingTally ?? {});
+  const [lastReveal, setLastReveal] = useState<RoundRevealSummary | null>(saved?.lastReveal ?? null);
+  const [previousLeaderId, setPreviousLeaderId] = useState<string | null>(saved?.previousLeaderId ?? null);
   const [backWarning, setBackWarning] = useState(false);
 
-  const scoredRoundRef = useRef<number>(0);
+  const scoredRoundRef = useRef(saved?.lastReveal?.roundNumber ?? 0);
 
-  // Guard browser Back button so pressing Back during secret reveal never exposes previous word
+  const [error, setError] = useState('');
   useEffect(() => {
-    window.history.pushState({ passAndPlayLock: true }, '');
-    const onPopState = () => {
-      window.history.pushState({ passAndPlayLock: true }, '');
-      setBackWarning(true);
+    const snapshot: LocalMatch = {
+      config, playerNames, players, phase, currentRound, playedWordIds, playedPairIds,
+      assignment, revealIndex, timerEndsAt, pausedSeconds, activeCard, usedCardIds,
+      matchups, questionIndex, voterIndex, votes, tieCandidateIds, securedAccusedIds,
+      initialVotes, initialTally, pendingAccusedIds, pendingTally, lastReveal, previousLeaderId,
     };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+    writeSession(LOCAL_MATCH_KEY, snapshot);
+  }, [config, playerNames, players, phase, currentRound, playedWordIds, playedPairIds,
+    assignment, revealIndex, timerEndsAt, pausedSeconds, activeCard, usedCardIds,
+    matchups, questionIndex, voterIndex, votes, tieCandidateIds, securedAccusedIds,
+    initialVotes, initialTally, pendingAccusedIds, pendingTally, lastReveal, previousLeaderId]);
 
-  // Warn before accidental refresh during an active match
   useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (phase !== 'FINAL_WINNER') {
-        e.preventDefault();
-        e.returnValue = '';
-      }
+    if (phase === 'SECRET_REVEAL') soundFx.playStart();
+  }, [phase, assignment.wordIdUsed]);
+
+  const resetTimer = (seconds: number) => {
+    setTimerEndsAt(timerDeadline(seconds));
+    setTimerRemaining(seconds);
+    setPausedSeconds(null);
+  };
+
+  useEffect(() => {
+    if (timerEndsAt === null || (phase !== 'DISCUSSION' && phase !== 'PLAYER_QUESTIONS')) return;
+    let previous = secondsLeft(timerEndsAt);
+    const update = () => {
+      const next = secondsLeft(timerEndsAt);
+      if (phase === 'DISCUSSION' && next > 0 && next <= 5 && previous !== next) soundFx.playTick();
+      previous = next;
+      setTimerRemaining(next);
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [phase]);
-
-  // Discussion countdown timer
-  useEffect(() => {
-    if (phase !== 'DISCUSSION' || config.discussionSeconds <= 0 || timerPaused || timerRemaining <= 0) {
-      return;
-    }
-    const id = window.setInterval(() => {
-      setTimerRemaining((prev) => {
-        if (prev <= 1) {
-          soundFx.playDramaticCue();
-          return 0;
-        }
-        if (prev <= 6) soundFx.playTick();
-        return prev - 1;
-      });
-    }, 1000);
+    update();
+    const id = window.setInterval(update, 200);
     return () => window.clearInterval(id);
-  }, [phase, config.discussionSeconds, timerPaused, timerRemaining]);
+  }, [timerEndsAt, phase]);
 
   // Suspicion moment 2-second beat before voting
   useEffect(() => {
@@ -130,7 +173,6 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
       setPhase('VOTING');
       setVoterIndex(0);
       setVotes({});
-      setIsTieBreaker(false);
       setTieCandidateIds([]);
       return;
     }
@@ -154,22 +196,31 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     setAssignment(nextAssign);
     setCurrentRound(nextRoundNum);
     setRevealIndex(0);
-    setTimerRemaining(config.discussionSeconds);
-    setTimerPaused(false);
+    resetTimer(0);
+    setMatchups([]);
+    setQuestionIndex(0);
+    setVoterIndex(0);
     setActiveCard(null);
     setUsedCardIds([]);
     setVotes({});
-    setIsTieBreaker(false);
     setTieCandidateIds([]);
     setPendingAccusedIds([]);
     setPendingTally({});
+    setSecuredAccusedIds([]);
+    setInitialVotes(null);
+    setInitialTally(null);
+    setError('');
     setLastReveal(null);
     setPhase('SECRET_REVEAL');
   };
 
   const handleSkipWord = () => {
-    const nextWords = [...playedWordIds, assignment.wordIdUsed];
+    const nextWords = [...playedWordIds, assignment.wordIdUsed, ...(assignment.secondWordIdUsed ? [assignment.secondWordIdUsed] : [])];
     const nextPairs = assignment.pairIdUsed ? [...playedPairIds, assignment.pairIdUsed] : playedPairIds;
+    if (!hasRoundCapacity(config, bank, config.totalRounds - currentRound + 1, nextWords, nextPairs)) {
+      setError('ما في كلمة بديلة تكفي لإكمال المباراة.');
+      return;
+    }
     setPlayedWordIds(nextWords);
     setPlayedPairIds(nextPairs);
     startRound(currentRound, nextWords, nextPairs, false);
@@ -179,12 +230,26 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     if (revealIndex + 1 < players.length) {
       setRevealIndex((i) => i + 1);
     } else {
-      setPhase('DISCUSSION');
+      setMatchups(createMatchups(players.map((p) => p.id)));
+      setQuestionIndex(0);
+      resetTimer(config.questionSeconds);
+      setPhase('PLAYER_QUESTIONS');
     }
   };
 
+  const advanceQuestion = (postpone = false) => {
+    setActiveCard(null);
+    if (postpone) setMatchups(postponeMatchup(matchups, questionIndex));
+    else if (questionIndex === matchups.length - 1) {
+      resetTimer(config.discussionSeconds);
+      setPhase('DISCUSSION');
+      return;
+    } else setQuestionIndex(questionIndex + 1);
+    resetTimer(config.questionSeconds);
+  };
+
   const handleDrawCard = () => {
-    const card = pickDiscussionCardForRound(bank, assignment.categoryId, usedCardIds);
+    const card = pickDiscussionCardForRound(bank, assignment.categoryId, usedCardIds, config.ageBand);
     if (card) {
       soundFx.playTap();
       setActiveCard(card);
@@ -212,9 +277,9 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     const { summary, updatedScores, newLeaderId } = finalizeRoundSummary({
       assignment,
       players,
-      votes: finalVotes,
+      votes: initialVotes ?? finalVotes,
       accusedIds,
-      tally,
+      tally: initialTally ?? tally,
       scoringRules: config.scoringRules,
       outlierGuessText: guessText,
       totalRounds: config.totalRounds,
@@ -224,16 +289,19 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     setPlayers((prev) => prev.map((p) => ({ ...p, score: updatedScores[p.id] ?? p.score })));
     setPreviousLeaderId(newLeaderId);
     setLastReveal(summary);
-    setPlayedWordIds((prev) => [...prev, assignment.wordIdUsed]);
+    setPlayedWordIds((prev) => [...prev, assignment.wordIdUsed, ...(assignment.secondWordIdUsed ? [assignment.secondWordIdUsed] : [])]);
     if (assignment.pairIdUsed) {
       setPlayedPairIds((prev) => [...prev, assignment.pairIdUsed!]);
     }
-    soundFx.playReveal(false);
+    soundFx.playReveal();
+    if (summary.leaderChanged) soundFx.playLead();
     setPhase('REVEAL');
   };
 
   const handlePlayerVote = (targetIds: string[]) => {
     const voter = players[voterIndex];
+    if (!validateVoteSubmission({ voterId: voter.id, targetIds, players, gameMode: config.gameMode,
+      existingVotes: votes, allowVoteChange: false, tieCandidateIds }).valid) return;
     const nextVotes = { ...votes, [voter.id]: targetIds };
     setVotes(nextVotes);
 
@@ -248,11 +316,14 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
       players,
       gameMode: config.gameMode,
       isTieBreakerRound: isTieBreaker,
+      securedAccusedIds,
     });
 
     if (outcome.needsTieBreaker) {
       soundFx.playDramaticCue();
-      setIsTieBreaker(true);
+      setSecuredAccusedIds(outcome.accusedIds);
+      setInitialVotes(nextVotes);
+      setInitialTally(outcome.tally);
       setTieCandidateIds(outcome.tieCandidateIds);
       setVotes({});
       setVoterIndex(0);
@@ -290,7 +361,9 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
   const handlePlayAgainSameSettings = () => {
     scoredRoundRef.current = 0;
     setPreviousLeaderId(null);
-    startRound(1, playedWordIds, playedPairIds, true);
+    setPlayedWordIds([]);
+    setPlayedPairIds([]);
+    startRound(1, [], [], true);
   };
 
   const currentRevealPlayer = players[revealIndex];
@@ -298,19 +371,19 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
   const starterPlayer = players.find((p) => p.id === assignment.starterPlayerId) || players[0];
 
   return (
-    <div className="min-h-screen bg-[#070E1A] text-slate-100 flex flex-col">
+    <div className="min-h-svh bg-transparent text-ink flex flex-col">
       {/* Top Bar */}
-      <header className="border-b border-white/10 bg-[#0B1526]/90 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
+      <header className="border-b border-ink/25 bg-paper/90 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
         <GameBrandLockup compact />
 
-        <div className="text-xs sm:text-sm text-slate-300 tabular-nums hidden sm:block">
-          جهاز واحد · الجولة <strong className="text-teal-300">{currentRound}</strong>/{config.totalRounds}
+        <div className="text-xs sm:text-sm text-caption tabular-nums hidden sm:block">
+          جهاز واحد · الجولة <strong className="text-berry">{currentRound}</strong>/{config.totalRounds}
         </div>
 
         <button
           type="button"
           onClick={() => setBackWarning(true)}
-          className="min-h-[40px] px-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          className="min-h-[40px] px-3.5 rounded-xl bg-lilac hover:bg-lilac border border-ink/25 text-ink text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
         >
           <ArrowRight className="w-4 h-4" />
           <span>إنهاء</span>
@@ -319,7 +392,7 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
 
       {backWarning && (
         <div className="bg-amber-500/15 border-b border-amber-400/40 px-4 py-3 flex flex-wrap items-center justify-between gap-3 max-w-4xl mx-auto w-full mt-3 rounded-xl">
-          <p className="text-sm text-amber-200 flex items-center gap-2">
+          <p className="text-sm text-berry flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 shrink-0" />
             <span>تم منع الرجوع التلقائي لحماية الكلمات السرية. هل تريد إنهاء المباراة والعودة للرئيسية؟</span>
           </p>
@@ -327,7 +400,7 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
             <button
               type="button"
               onClick={() => setBackWarning(false)}
-              className="min-h-[36px] px-3 rounded-lg bg-white/10 text-xs font-bold cursor-pointer"
+              className="min-h-[36px] px-3 rounded-lg bg-lilac text-xs font-bold cursor-pointer"
             >
               متابعة اللعب
             </button>
@@ -342,9 +415,10 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
         </div>
       )}
 
-      <main className="flex-1 flex flex-col justify-center px-4 py-6 sm:py-10">
+      <main className="flex-1 flex flex-col justify-center px-3 py-4 sm:px-6 sm:py-8">
         {phase === 'SECRET_REVEAL' && currentRevealPlayer && (
           <SecretCardReveal
+            key={`${assignment.wordIdUsed}:${currentRevealPlayer.id}`}
             playerName={currentRevealPlayer.name}
             avatarIndex={currentRevealPlayer.avatarIndex}
             categoryNameAr={assignment.categoryNameAr}
@@ -359,6 +433,12 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
           />
         )}
 
+        {error && <p role="alert" className="text-center font-bold">{error}</p>}
+        {phase === 'PLAYER_QUESTIONS' && questionTurn && (
+          <QuestionStage turn={questionTurn} players={players} timer={timerRemaining}
+            timed={config.questionSeconds > 0} card={activeCard}
+            onNext={() => advanceQuestion()} onPostpone={() => advanceQuestion(true)} onCard={handleDrawCard} />
+        )}
         {phase === 'DISCUSSION' && (
           <DiscussionStage
             currentRound={currentRound}
@@ -370,7 +450,13 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
             timerPaused={timerPaused}
             activeCard={activeCard}
             canControl={true}
-            onTogglePause={() => setTimerPaused((p) => !p)}
+            onTogglePause={() => {
+              if (pausedSeconds !== null) resetTimer(pausedSeconds);
+              else {
+                setPausedSeconds(secondsLeft(timerEndsAt));
+                setTimerEndsAt(null);
+              }
+            }}
             onDrawCard={handleDrawCard}
             onStartVoting={handleStartVoting}
             onSkipWord={handleSkipWord}
@@ -383,6 +469,7 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
 
         {(phase === 'VOTING' || phase === 'TIE_BREAKER') && currentVoter && (
           <VotingStage
+            key={`${phase}:${currentVoter.id}`}
             players={players}
             currentVoter={currentVoter}
             gameMode={config.gameMode}

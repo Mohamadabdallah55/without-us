@@ -1,15 +1,15 @@
-import React, { useEffect } from 'react';
-import { MonitorPlay, Settings2, ShieldCheck, Users, Volume2, VolumeX, Zap, Sparkles } from 'lucide-react';
-import { GameBrandLockup, GeometricDivider } from './SvgAssets';
-import heroBackdropUrl from '../assets/images/hero_majlis_backdrop_1794616510551.jpg';
+import { ArrowLeft, MonitorPlay, Settings2, Sparkles, Users, Volume2, VolumeX, Zap } from 'lucide-react';
+import type { SoundMode } from '../utils/sound';
+import { GAME_BRAND } from '../game/brand';
+import { GameBrandLockup, SuspectMascot } from './SvgAssets';
 
 interface TitleScreenProps {
   wordCount: number;
   pairCount: number;
   cardCount: number;
-  muted: boolean;
+  soundMode: SoundMode;
   reduceMotion: boolean;
-  onToggleMute: () => void;
+  onChangeSoundMode: () => void;
   onToggleReduceMotion: () => void;
   onQuickStart: () => void;
   onCustomSetup: () => void;
@@ -18,162 +18,45 @@ interface TitleScreenProps {
   onOpenAdmin: () => void;
 }
 
-export const TitleScreen: React.FC<TitleScreenProps> = ({
-  wordCount,
-  pairCount,
-  cardCount,
-  muted,
-  reduceMotion,
-  onToggleMute,
-  onToggleReduceMotion,
-  onQuickStart,
-  onCustomSetup,
-  onJoinRoom,
-  onOpenProjector,
-  onOpenAdmin,
-}) => {
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onCustomSetup();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onCustomSetup]);
-
+export function TitleScreen(props: TitleScreenProps) {
   return (
-    <div className="relative min-h-screen w-full overflow-hidden flex flex-col justify-between bg-[#070E1A]">
-      {/* Illustrated 2D Key Art Backdrop with measured scrim */}
-      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        <img
-          src={heroBackdropUrl}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-cover opacity-55"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#070E1A]/85 via-[#070E1A]/65 to-[#070E1A]/95" />
-      </div>
-
-      {/* Minimalist HUD Utility Strip */}
-      <div className="relative z-10 flex items-center justify-between px-4 sm:px-8 pt-4 sm:pt-6">
-        <p className="text-xs sm:text-sm font-medium text-amber-200/90 tracking-wide">
-          مكتبة الألعاب الدائمة — مسجد ابن تيمية · الأردن
-        </p>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onToggleReduceMotion}
-            aria-label={reduceMotion ? 'تفعيل الحركة الكاملة' : 'تقليل الحركة'}
-            title={reduceMotion ? 'تفعيل الحركة الكاملة' : 'تقليل الحركة'}
-            className={`min-h-[44px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              reduceMotion
-                ? 'bg-teal-500/20 border-teal-400/50 text-teal-200'
-                : 'bg-[#0B1526]/80 border-white/15 text-slate-300 hover:border-teal-400/40'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span className="hidden sm:inline">{reduceMotion ? 'حركة مقلّلة' : 'الحركة'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleMute}
-            aria-label={muted ? 'تشغيل المؤثرات الصوتية' : 'كتم الصوت (الوضع الهادئ)'}
-            title={muted ? 'تشغيل المؤثرات الصوتية' : 'كتم الصوت'}
-            className={`min-h-[44px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              muted
-                ? 'bg-[#0B1526]/85 border-amber-400/35 text-amber-200'
-                : 'bg-teal-500/20 border-teal-400/50 text-teal-200'
-            }`}
-          >
-            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            <span>{muted ? 'الوضع الهادئ' : 'الصوت مفعّل'}</span>
+    <div className="party-home">
+      <header className="party-top">
+        <GameBrandLockup compact />
+        <div>
+          <button type="button" onClick={props.onToggleReduceMotion} aria-pressed={props.reduceMotion} aria-label="تقليل الحركة"><Sparkles size={17} /></button>
+          <button type="button" onClick={props.onChangeSoundMode} aria-label="بدّل وضع الصوت">
+            {props.soundMode === 'muted' ? <VolumeX size={17} /> : <Volume2 size={17} />}
+            <span>{props.soundMode === 'muted' ? 'الصوت مكتوم' : props.soundMode === 'quiet' ? 'الوضع الهادئ' : 'الصوت شغّال'}</span>
           </button>
         </div>
-      </div>
-
-      {/* Main Focal Centerpiece */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-4xl mx-auto w-full">
-        <GameBrandLockup />
-
-        <p className="mt-4 text-lg sm:text-2xl font-semibold text-amber-300 text-center [text-wrap:balance]">
-          «كلنا عارفين السالفة... إلا واحد!»
-        </p>
-
-        <GeometricDivider />
-
-        {/* Unboxed Verified Bank Summary */}
-        <p className="text-sm sm:text-base text-slate-300 text-center tabular-nums">
-          <span>{wordCount} كلمة معتمدة</span>
-          <span className="mx-2 text-amber-400/70" aria-hidden="true">·</span>
-          <span>{pairCount} زوج متشابه</span>
-          <span className="mx-2 text-amber-400/70" aria-hidden="true">·</span>
-          <span>{cardCount} بطاقة نقاش</span>
-        </p>
-
-        {/* Primary Action CTAs */}
-        <div className="mt-8 w-full max-w-xl grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <button
-            type="button"
-            data-start="true"
-            onClick={onCustomSetup}
-            className="sm:col-span-2 min-h-[56px] px-6 py-4 rounded-2xl bg-teal-500 hover:bg-teal-400 active:scale-[0.99] text-[#051019] font-display font-extrabold text-lg sm:text-xl shadow-[0_14px_34px_rgba(20,184,166,0.32)] transition-all flex items-center justify-center gap-2.5 cursor-pointer whitespace-nowrap"
-          >
-            <Settings2 className="w-5 h-5" />
-            <span>إعداد مباراة جديدة</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onQuickStart}
-            className="min-h-[52px] px-5 py-3.5 rounded-2xl bg-[#112038]/90 hover:bg-[#172A48] border border-amber-400/40 text-amber-200 font-bold text-base transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
-          >
-            <Zap className="w-5 h-5 text-amber-300" />
-            <span>مباراة سريعة (5 جولات)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onJoinRoom}
-            className="min-h-[52px] px-5 py-3.5 rounded-2xl bg-[#112038]/90 hover:bg-[#172A48] border border-teal-400/35 text-teal-200 font-bold text-base transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
-          >
-            <Users className="w-5 h-5 text-teal-300" />
-            <span>انضمام إلى غرفة برمز</span>
-          </button>
+      </header>
+      <main className="party-hero">
+        <div className="party-hero-copy">
+          <p className="party-sticker"><Sparkles size={17} /> لعبة قعدة · ٣–١٢ لاعب</p>
+          <h1 className="party-wordmark">{GAME_BRAND.name}</h1>
+          <p className="party-slogan">«{GAME_BRAND.slogan}»</p>
+          <p>اسأل، لفّ ودوّر، واكشف مين اللي ضايع بالسالفة.</p>
+          <div className="party-home-actions">
+            <button className="party-primary" type="button" onClick={props.onCustomSetup}>يلا نبلّش! <ArrowLeft size={23} /></button>
+            <button type="button" onClick={props.onQuickStart}><Zap size={19} /> مباراة سريعة</button>
+            <button type="button" onClick={props.onJoinRoom}><Users size={19} /> انضم لغرفة</button>
+          </div>
         </div>
-
-        {/* Secondary Modes Row */}
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={onOpenProjector}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[#0B1526]/85 hover:bg-[#12223C] border border-white/15 text-slate-200 text-sm font-medium inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <MonitorPlay className="w-4 h-4 text-teal-300" />
-            <span>شاشة البروجكتر (16:9)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenAdmin}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[#0B1526]/85 hover:bg-[#12223C] border border-white/15 text-slate-200 text-sm font-medium inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <ShieldCheck className="w-4 h-4 text-amber-300" />
-            <span>إدارة بنك الكلمات</span>
-          </button>
+        <div className="party-hero-art">
+          <span className="party-art-bubble">حاسّين في إشي غلط؟</span>
+          <SuspectMascot />
+          <span className="party-art-label" aria-hidden="true">؟!</span>
         </div>
       </main>
-
-      {/* Single flat control hint line */}
-      <footer className="relative z-10 pb-5 px-4 text-center">
-        <p className="text-xs sm:text-sm text-slate-400">
-          3 أوضاع لعب (الكلاسيكي · الملخبط · اثنين مش معنا) — يعمل محليًا بدون ذكاء اصطناعي أثناء اللعب
-        </p>
+      <footer className="party-footer">
+        <p>{props.wordCount} كلمة معتمدة · {props.pairCount} زوج متشابه · {props.cardCount} سؤال مساعد</p>
+        <div>
+          <button type="button" onClick={props.onOpenProjector}><MonitorPlay size={18} /> شاشة البروجكتر</button>
+          <button type="button" onClick={props.onOpenAdmin}><Settings2 size={17} /> بنك الكلمات</button>
+        </div>
+        <small>الناشر: {GAME_BRAND.publisher}</small>
       </footer>
     </div>
   );
-};
+}

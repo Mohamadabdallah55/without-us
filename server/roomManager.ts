@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { createMatchups, getQuestionTurn, postponeMatchup, secondsLeft, timerDeadline, type Matchup } from '../src/game/questions';
 import { sanitizeUserText } from '../src/game/arabic';
 import {
   DEFAULT_GAME_CONFIG,
@@ -6,6 +7,7 @@ import {
   createRoundAssignment,
   evaluateVotingOutcome,
   finalizeRoundSummary,
+  hasRoundCapacity,
   pickDiscussionCardForRound,
   validateMatchStart,
   validateVoteSubmission,
@@ -35,6 +37,13 @@ interface InternalRoom {
   players: InternalPlayer[];
   currentRound: number;
   assignment: SecretRoundAssignment | null;
+  roundId: string | null;
+  matchups: Matchup[];
+  questionIndex: number;
+  timerEndsAt: number | null;
+  securedAccusedIds: string[];
+  initialVotes: Record<string, string[]> | null;
+  initialTally: Record<string, number> | null;
   playedWordIds: string[];
   playedPairIds: string[];
   revealedPlayerIds: Set<string>;
@@ -59,6 +68,30 @@ const ROOM_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours inactivity expiry
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 type BroadcastListener = (roomCode: string) => void;
+
+function validateConfig(config: GameConfig): GameConfig {
+  const integer = (value: number, min: number, max: number) => Number.isInteger(value) && value >= min && value <= max;
+  if (!['classic', 'confusing_pair', 'two_outliers'].includes(config.gameMode) ||
+      !['children_7_10', 'preteens_11_13', 'teens_14_17', 'adults_18_plus', 'families_mixed'].includes(config.ageBand) ||
+      !Array.isArray(config.categories) || config.categories.length > 30 ||
+      !config.categories.every((id) => typeof id === 'string' && id.length <= 50) ||
+      !integer(config.maxDifficulty, 1, 5) || !integer(config.totalRounds, 1, 15) ||
+      !integer(config.questionSeconds, 0, 120) || !integer(config.discussionSeconds, 0, 120) ||
+      typeof config.allowVoteChangeBeforeClose !== 'boolean' ||
+      !Object.keys(DEFAULT_GAME_CONFIG.scoringRules).every((key) =>
+        integer(config.scoringRules[key as keyof GameConfig['scoringRules']], 0, 5))) {
+    throw new Error('إعدادات الغرفة مش صالحة.');
+  }
+  // Whitelist fields: untrusted config keys must never be echoed to the projector.
+  const { gameMode, ageBand, categories, maxDifficulty, totalRounds, questionSeconds,
+    discussionSeconds, allowVoteChangeBeforeClose } = config;
+  const scoringRules = { ...DEFAULT_GAME_CONFIG.scoringRules };
+  for (const key of Object.keys(scoringRules) as Array<keyof typeof scoringRules>) {
+    scoringRules[key] = config.scoringRules[key];
+  }
+  return { deviceMode: 'multi_device', gameMode, ageBand, categories, maxDifficulty, totalRounds,
+    questionSeconds, discussionSeconds, allowVoteChangeBeforeClose, scoringRules };
+}
 
 export class RoomManager {
   private rooms = new Map<string, InternalRoom>();
@@ -119,16 +152,15 @@ export class RoomManager {
     for (const [code, room] of this.rooms.entries()) {
       if (now > room.expiresAt) {
         this.rooms.delete(code);
+        this.notify(code);
         continue;
       }
-      if (
-        room.phase === 'DISCUSSION' &&
-        room.config.discussionSeconds > 0 &&
-        !room.timerPaused &&
-        room.timerRemaining > 0
-      ) {
-        room.timerRemaining -= 1;
-        this.notify(code);
+      if (room.timerEndsAt !== null) {
+        const remaining = secondsLeft(room.timerEndsAt, now);
+        if (remaining !== room.timerRemaining) {
+          room.timerRemaining = remaining;
+          this.notify(code);
+        }
       }
     }
   }
@@ -146,7 +178,7 @@ export class RoomManager {
     const playerId = crypto.randomUUID();
     const cleanHost = sanitizeUserText(params.hostName, 24) || 'المضيف';
 
-    const config: GameConfig = {
+    const config = validateConfig({
       ...DEFAULT_GAME_CONFIG,
       ...params.config,
       deviceMode: 'multi_device',
@@ -154,7 +186,7 @@ export class RoomManager {
         ...DEFAULT_GAME_CONFIG.scoringRules,
         ...(params.config?.scoringRules || {}),
       },
-    };
+    });
 
     const now = Date.now();
     const room: InternalRoom = {
@@ -178,6 +210,13 @@ export class RoomManager {
       ],
       currentRound: 0,
       assignment: null,
+      roundId: null,
+      matchups: [],
+      questionIndex: 0,
+      timerEndsAt: null,
+      securedAccusedIds: [],
+      initialVotes: null,
+      initialTally: null,
       playedWordIds: [],
       playedPairIds: [],
       revealedPlayerIds: new Set(),
@@ -260,7 +299,7 @@ export class RoomManager {
     room.players.push({
       id: playerId,
       name: cleanName,
-      avatarIndex: room.players.length % 12,
+      avatarIndex: Array.from({ length: 12 }, (_, i) => i).find((i) => !room.players.some((p) => p.avatarIndex === i))!,
       score: 0,
       connected: true,
       isHost: false,
@@ -318,7 +357,7 @@ export class RoomManager {
     if (room.phase !== 'LOBBY') {
       throw new Error('لا يمكن تعديل قواعد النقاط أو الإعدادات بعد بدء المباراة.');
     }
-    room.config = {
+    room.config = validateConfig({
       ...room.config,
       ...patch,
       deviceMode: 'multi_device',
@@ -326,7 +365,7 @@ export class RoomManager {
         ...room.config.scoringRules,
         ...(patch.scoringRules || {}),
       },
-    };
+    });
     this.touch(room);
     this.notify(room.roomCode);
     return this.getPublicRoomState(room.roomCode)!;
@@ -345,6 +384,7 @@ export class RoomManager {
   kickPlayer(roomCode: string, hostToken: string, targetPlayerId: string): PublicRoomState {
     const room = this.requireRoom(roomCode);
     this.requireHost(room, hostToken);
+    if (room.phase !== 'LOBBY') throw new Error('إخراج لاعب متاح قبل بداية المباراة فقط.');
     const target = room.players.find((p) => p.id === targetPlayerId);
     if (!target) throw new Error('اللاعب غير موجود.');
     if (target.isHost) throw new Error('لا يمكن طرد المضيف.');
@@ -379,11 +419,10 @@ export class RoomManager {
     return this.getPublicRoomState(room.roomCode)!;
   }
 
-  private startRoundInternal(room: InternalRoom) {
+  private startRoundInternal(room: InternalRoom, roundNumber = room.currentRound + 1) {
     const bank = getPublicPlayableBank();
-    room.currentRound += 1;
     const assignment = createRoundAssignment({
-      roundNumber: room.currentRound,
+      roundNumber,
       players: room.players.map((p) => ({ id: p.id, name: p.name })),
       config: room.config,
       bank,
@@ -391,8 +430,17 @@ export class RoomManager {
       playedPairIds: room.playedPairIds,
     });
 
+    room.currentRound = roundNumber;
     room.assignment = assignment;
+    room.roundId = crypto.randomUUID();
+    room.matchups = [];
+    room.questionIndex = 0;
+    room.timerEndsAt = null;
+    room.securedAccusedIds = [];
+    room.initialVotes = null;
+    room.initialTally = null;
     room.playedWordIds.push(assignment.wordIdUsed);
+    if (assignment.secondWordIdUsed) room.playedWordIds.push(assignment.secondWordIdUsed);
     if (assignment.pairIdUsed) room.playedPairIds.push(assignment.pairIdUsed);
     room.phase = 'SECRET_REVEAL';
     room.revealedPlayerIds = new Set();
@@ -418,28 +466,50 @@ export class RoomManager {
     this.notify(room.roomCode);
   }
 
-  markPlayerRevealed(roomCode: string, playerToken: string): PublicRoomState {
+  markPlayerRevealed(roomCode: string, playerToken: string, roundId: string): PublicRoomState {
     const room = this.requireRoom(roomCode);
-    if (room.phase !== 'SECRET_REVEAL') {
+    if (room.phase !== 'SECRET_REVEAL' || room.roundId !== roundId) {
       throw new Error('مرحلة كشف الكلمة ليست نشطة الآن.');
     }
     const player = this.requirePlayer(room, playerToken);
     room.revealedPlayerIds.add(player.id);
     player.hasRevealed = true;
+    if (room.revealedPlayerIds.size === room.players.length) {
+      room.matchups = createMatchups(room.players.map((p) => p.id));
+      room.phase = 'PLAYER_QUESTIONS';
+      this.resetTimer(room, room.config.questionSeconds);
+    }
     this.touch(room);
     this.notify(room.roomCode);
     return this.getPublicRoomState(room.roomCode)!;
   }
 
-  beginDiscussion(roomCode: string, hostToken: string): PublicRoomState {
+  private resetTimer(room: InternalRoom, seconds: number) {
+    room.timerRemaining = seconds;
+    room.timerPaused = false;
+    room.timerEndsAt = timerDeadline(seconds);
+  }
+
+  advanceQuestion(roomCode: string, hostToken: string, turnId: string, postpone = false): PublicRoomState {
     const room = this.requireRoom(roomCode);
     this.requireHost(room, hostToken);
-    if (room.phase !== 'SECRET_REVEAL') {
-      throw new Error('لا يمكن بدء النقاش من المرحلة الحالية.');
+    const turn = getQuestionTurn(room.roundId!, room.matchups, room.questionIndex);
+    if (room.phase !== 'PLAYER_QUESTIONS' || !turn || turn.id !== turnId) {
+      throw new Error('هاي المواجهة خلصت أو لسه ما بلشت.');
     }
-    room.phase = 'DISCUSSION';
-    room.timerRemaining = room.config.discussionSeconds;
-    room.timerPaused = false;
+    if (postpone) {
+      if (turn.number === turn.total) throw new Error('هاي آخر مواجهة.');
+      room.matchups = postponeMatchup(room.matchups, room.questionIndex);
+    } else {
+      room.questionIndex += 1;
+    }
+    room.activeDiscussionCard = null;
+    if (room.questionIndex === room.matchups.length) {
+      room.phase = 'DISCUSSION';
+      this.resetTimer(room, room.config.discussionSeconds);
+    } else {
+      this.resetTimer(room, room.config.questionSeconds);
+    }
     this.touch(room);
     this.notify(room.roomCode);
     return this.getPublicRoomState(room.roomCode)!;
@@ -448,10 +518,18 @@ export class RoomManager {
   setTimerPaused(roomCode: string, hostToken: string, paused: boolean): PublicRoomState {
     const room = this.requireRoom(roomCode);
     this.requireHost(room, hostToken);
-    if (room.phase !== 'DISCUSSION') {
-      throw new Error('المؤقت يعمل أثناء مرحلة النقاش فقط.');
+    if (room.phase !== 'DISCUSSION' && room.phase !== 'PLAYER_QUESTIONS') {
+      throw new Error('المؤقت مش شغال بهاي المرحلة.');
     }
-    room.timerPaused = paused;
+    if (paused !== room.timerPaused) {
+      if (paused) {
+        room.timerRemaining = secondsLeft(room.timerEndsAt);
+        room.timerEndsAt = null;
+      } else {
+        room.timerEndsAt = timerDeadline(room.timerRemaining);
+      }
+      room.timerPaused = paused;
+    }
     this.touch(room);
     this.notify(room.roomCode);
     return this.getPublicRoomState(room.roomCode)!;
@@ -460,14 +538,15 @@ export class RoomManager {
   drawDiscussionCard(roomCode: string, hostToken: string): PublicRoomState {
     const room = this.requireRoom(roomCode);
     this.requireHost(room, hostToken);
-    if (room.phase !== 'DISCUSSION' || !room.assignment) {
+    if ((room.phase !== 'DISCUSSION' && room.phase !== 'PLAYER_QUESTIONS') || !room.assignment) {
       throw new Error('بطاقات النقاش متاحة أثناء مرحلة النقاش فقط.');
     }
     const bank = getPublicPlayableBank();
     const card = pickDiscussionCardForRound(
       bank,
       room.assignment.categoryId,
-      room.usedDiscussionCardIdsInRound
+      room.usedDiscussionCardIdsInRound,
+      room.config.ageBand
     );
     if (card) {
       room.activeDiscussionCard = card;
@@ -487,6 +566,7 @@ export class RoomManager {
       throw new Error('لا يمكن الانتقال للتصويت من المرحلة الحالية.');
     }
     room.phase = 'VOTING';
+    this.resetTimer(room, 0);
     room.votes = {};
     room.isTieBreakerRound = false;
     room.tieCandidateIds = [];
@@ -496,11 +576,12 @@ export class RoomManager {
     return this.getPublicRoomState(room.roomCode)!;
   }
 
-  submitVote(roomCode: string, playerToken: string, targetIds: string[]): PublicRoomState {
+  submitVote(roomCode: string, playerToken: string, targetIds: string[], roundId: string, ballot: string): PublicRoomState {
     const room = this.requireRoom(roomCode);
     if (room.phase !== 'VOTING' && room.phase !== 'TIE_BREAKER') {
       throw new Error('التصويت مغلق حاليًا.');
     }
+    if (room.roundId !== roundId || room.phase !== ballot) throw new Error('هاي بطاقة تصويت قديمة.');
     const player = this.requirePlayer(room, playerToken);
     const check = validateVoteSubmission({
       voterId: player.id,
@@ -528,15 +609,22 @@ export class RoomManager {
     }
     if (!room.assignment) throw new Error('بيانات الجولة غير مكتملة.');
 
+    if (room.players.some((p) => p.connected && !p.hasVoted)) {
+      throw new Error('استنّى تصويت اللاعبين المتصلين.');
+    }
     const outcome = evaluateVotingOutcome({
       votes: room.votes,
       players: room.players,
       gameMode: room.config.gameMode,
       isTieBreakerRound: room.isTieBreakerRound,
+      securedAccusedIds: room.securedAccusedIds,
     });
 
     if (outcome.needsTieBreaker) {
       room.phase = 'TIE_BREAKER';
+      room.securedAccusedIds = outcome.accusedIds;
+      room.initialVotes = room.votes;
+      room.initialTally = outcome.tally;
       room.isTieBreakerRound = true;
       room.tieCandidateIds = outcome.tieCandidateIds;
       room.votes = {};
@@ -547,7 +635,7 @@ export class RoomManager {
       return this.getPublicRoomState(room.roomCode)!;
     }
 
-    room.pendingTally = outcome.tally;
+    room.pendingTally = room.initialTally ?? outcome.tally;
     room.accusedIdsPendingGuess = outcome.accusedIds;
 
     // In Classic mode, if outlier was caught, give them ONE chance to guess the secret word
@@ -586,7 +674,7 @@ export class RoomManager {
     const { summary, updatedScores, newLeaderId } = finalizeRoundSummary({
       assignment: room.assignment,
       players: room.players,
-      votes: room.votes,
+      votes: room.initialVotes ?? room.votes,
       accusedIds: room.accusedIdsPendingGuess,
       tally: room.pendingTally || {},
       scoringRules: room.config.scoringRules,
@@ -604,15 +692,18 @@ export class RoomManager {
     this.addAudit(
       room,
       `كشف الجولة ${room.currentRound}`,
-      `الكلمة: ${summary.wordA} · المختلف: ${summary.outlierNames.join('، ')}`
+      `انحسبت نقاط الجولة`
     );
     this.touch(room);
     this.notify(room.roomCode);
   }
 
-  advanceAfterReveal(roomCode: string, hostToken: string): PublicRoomState {
+  advanceAfterReveal(roomCode: string, hostToken: string, roundId?: string, expectedPhase?: string): PublicRoomState {
     const room = this.requireRoom(roomCode);
     this.requireHost(room, hostToken);
+    if (roundId !== undefined && (roundId !== room.roundId || expectedPhase !== room.phase)) {
+      throw new Error('الشاشة تغيّرت، جرّب من المرحلة الحالية.');
+    }
     if (room.phase === 'REVEAL') {
       room.phase = room.currentRound >= room.config.totalRounds ? 'FINAL_WINNER' : 'RESULTS';
       this.touch(room);
@@ -629,13 +720,13 @@ export class RoomManager {
   skipWord(roomCode: string, hostToken: string): PublicRoomState {
     const room = this.requireRoom(roomCode);
     this.requireHost(room, hostToken);
-    if (room.phase === 'LOBBY' || room.phase === 'FINAL_WINNER') {
-      throw new Error('لا توجد جولة جارية لتخطي كلمتها.');
+    if (!['SECRET_REVEAL', 'PLAYER_QUESTIONS', 'DISCUSSION'].includes(room.phase)) {
+      throw new Error('تبديل الكلمة متاح قبل التصويت فقط.');
     }
-    // Re-roll round without incrementing round number
-    room.currentRound = Math.max(0, room.currentRound - 1);
+    if (!hasRoundCapacity(room.config, getPublicPlayableBank(), room.config.totalRounds - room.currentRound + 1,
+      room.playedWordIds, room.playedPairIds)) throw new Error('ما في كلمة بديلة تكفي لإكمال المباراة.');
     this.addAudit(room, 'تخطي الكلمة', 'استبدل المضيف الكلمة وأعاد توزيع الأدوار');
-    this.startRoundInternal(room);
+    this.startRoundInternal(room, room.currentRound);
     return this.getPublicRoomState(room.roomCode)!;
   }
 
@@ -644,6 +735,7 @@ export class RoomManager {
     this.requireHost(room, hostToken);
     const player = room.players.find((p) => p.id === playerId);
     if (!player) throw new Error('اللاعب غير موجود.');
+    if (!Number.isFinite(delta)) throw new Error('قيمة النقاط مش صحيحة.');
     const safeDelta = Math.max(-5, Math.min(5, Math.trunc(delta)));
     player.score = Math.max(0, player.score + safeDelta);
     this.addAudit(
@@ -693,6 +785,8 @@ export class RoomManager {
         hasVoted: p.hasVoted,
       })),
       currentRound: room.currentRound,
+      roundId: room.roundId,
+      questionTurn: room.phase === 'PLAYER_QUESTIONS' ? getQuestionTurn(room.roundId!, room.matchups, room.questionIndex) : null,
       starterPlayerId: starter?.id || null,
       starterPlayerName: starter?.name || null,
       currentCategoryId: room.assignment?.categoryId || null,
@@ -723,17 +817,22 @@ export class RoomManager {
     const isOutlier = room.assignment.outlierIds.includes(player.id);
     const secretWord = room.assignment.playerWords[player.id] ?? null;
     // In confusing_pair mode, NEVER indicate to the player that they are the outlier
-    const showOutlierHint = room.config.gameMode !== 'confusing_pair' && isOutlier;
+    const showOutlierHint = room.phase === 'SECRET_REVEAL' && room.config.gameMode !== 'confusing_pair' && isOutlier;
 
     return {
       playerId: player.id,
       roundNumber: room.currentRound,
-      isOutlier: showOutlierHint,
+      roundId: room.roundId!,
+      isOutlier: showOutlierHint || (room.phase === 'OUTLIER_GUESS' && isOutlier),
       showOutlierHint,
-      secretWord,
+      secretWord: room.phase === 'SECRET_REVEAL' ? secretWord : null,
       categoryNameAr: room.assignment.categoryNameAr,
       myVoteTargetIds: room.votes[player.id] || [],
     };
+  }
+
+  authenticatePlayer(roomCode: string, playerToken: string) {
+    this.requirePlayer(this.requireRoom(roomCode), playerToken);
   }
 
   destroy() {
