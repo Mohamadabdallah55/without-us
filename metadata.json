@@ -1,0 +1,6 @@
+{
+  "name": "هو معنا... بس مش معنا! — مكتبة ألعاب مسجد ابن تيمية",
+  "description": "لعبة عربية اجتماعية تفاعلية من مكتبة الألعاب الدائمة في مسجد ابن تيمية — الأردن. كلنا عارفين السالفة... إلا واحد!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
