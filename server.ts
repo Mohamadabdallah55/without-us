@@ -88,6 +88,7 @@ async function startServer() {
       frameguard: false,
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     })
   );
 

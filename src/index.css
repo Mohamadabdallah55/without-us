@@ -189,3 +189,29 @@ body:is([data-state=setup], [data-state=pass_and_play], [data-state=multi_device
   .projector-stage .faceoff-player strong { font-size: clamp(1.65rem, 3.2vw, 2.55rem); line-height: 1.25; }
   .projector-stage .faceoff-meta span:last-child { font-size: 1.45rem; }
 }
+
+/* Yemken Hay family: dark plum shell, golden actions, unique mint game card. */
+.party-home{background:#211329;color:#fff9ed;grid-template-rows:auto 1fr auto auto;gap:0}
+.party-top,.party-footer{background:#1c0a2b;color:#fff9ed;border-color:#100818}
+.party-top button,.party-footer button,.party-platform-link{color:#291638;background:#fff9ed;border:2px solid #100818;border-radius:.7rem;box-shadow:0 3px #100818;padding:.55rem .8rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:44px;text-decoration:none}
+.party-platform-link{background:#ffdf55}
+.party-hero{width:min(1160px,calc(100% - 32px));margin:20px auto 12px;gap:clamp(14px,4vw,46px);padding:clamp(18px,3vw,40px);border:2px solid #100818;border-radius:24px;box-shadow:0 6px #100818;background:radial-gradient(#2d745b32 1px,transparent 1.5px),linear-gradient(135deg,#bbf3c8,#53c49d);background-size:8px 8px,auto;color:#291638}
+.party-wordmark{font-size:clamp(2.6rem,6vw,5.8rem);text-shadow:3px 3px #ffdf55}
+.party-sticker{background:#fff9ed;font-size:.85rem}
+.party-hero-art{background:radial-gradient(#ffe45e80 1px,transparent 1.6px),linear-gradient(135deg,#9568de,#542b91);background-size:8px 8px,auto;border-radius:20px;color:#291638;aspect-ratio:1.25;min-height:200px}
+.party-hero-art svg{max-height:300px}
+.party-home-actions button{color:#291638}
+.party-home-actions .party-primary{background:#ffdf55}
+.party-home-actions button:last-child{background:#fff9ed}
+.party-mode-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:.8rem}
+.party-mode-tags span{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:#fff9edb8;border:1px solid #29163850;border-radius:7px;font-size:.76rem;font-weight:800}
+.party-how{width:min(1160px,calc(100% - 32px));margin:10px auto 22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.party-how>div{background:#fff9ed;color:#291638;border:2px solid #100818;border-radius:13px;padding:14px;box-shadow:0 4px #100818;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center}
+.party-how b{grid-row:span 2;background:#ffdf55;border:1px solid #291638;border-radius:8px;padding:8px;font-size:1rem}
+.party-how strong{font-weight:900}
+.party-how p{font-size:.78rem;color:#65536f}
+.party-account{position:relative}
+.party-account-menu,.party-account-error{position:absolute;z-index:20;top:calc(100% + 7px);inset-inline-end:0;width:min(270px,80vw);background:#fff9ed;color:#291638;padding:12px;border:2px solid #291638;border-radius:12px;box-shadow:0 5px #100818;font-size:.8rem}
+.party-account-menu p{margin:8px 0}
+.party-account-error{color:#a11d34}
+@media(max-width:650px){.party-hero{margin-top:12px;padding:15px}.party-hero-art{min-height:145px;aspect-ratio:auto}.party-how{grid-template-columns:1fr}.party-top{padding:8px 12px}.party-top>div{justify-content:center}.party-wordmark{font-size:2.8rem}.party-how>div{padding:9px}}
