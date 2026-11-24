@@ -81,11 +81,12 @@ export const VotingStage: React.FC<VotingStageProps> = ({
     soundFx.playTap();
     setSubmitted(true);
     if (await onSubmitVote(selectedIds) === false) setSubmitted(false);
+    else soundFx.playVote();
   };
 
   if (handoverGate) {
     return (
-      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in space-y-6">
+      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in kh-vote-card space-y-6">
         {voterProgressText && (
           <p className="text-xs font-semibold text-berry tabular-nums">{voterProgressText}</p>
         )}
@@ -111,7 +112,7 @@ export const VotingStage: React.FC<VotingStageProps> = ({
   }
 
   return (
-    <div className="max-w-3xl mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 party-panel party-stage-in space-y-6">
+    <div className="max-w-3xl mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 party-panel party-stage-in kh-vote-card space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/25 pb-4">
         <div>
           {voterProgressText && (

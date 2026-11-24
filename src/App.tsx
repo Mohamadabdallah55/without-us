@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AdminDashboard } from './components/AdminDashboard';
+import {lazy,Suspense} from 'react';
+const AdminDashboard=lazy(()=>import('./components/AdminDashboard').then(m=>({default:m.AdminDashboard})));
 import { MultiDeviceView } from './components/MultiDeviceView';
 import { PassAndPlayView, readLocalMatch } from './components/PassAndPlayView';
 import { ProjectorView } from './components/ProjectorView';
@@ -54,8 +55,9 @@ export default function App() {
   const [projectorCodeParam, setProjectorCodeParam] = useState(route.get('projector')?.toUpperCase() ?? '');
 
   // Quiet Mode (muted = true) is default for mosque setting
-  const [soundMode, setSoundMode] = useState<SoundMode>(() => readSession<SoundMode>('khalf_sound') ?? 'muted');
+  const [soundMode, setSoundMode] = useState<SoundMode>(() => readSession<SoundMode>('khalf_sound') ?? 'quiet');
   useEffect(() => soundFx.setMode(soundMode), [soundMode]);
+  useEffect(()=>{const unlock=()=>soundFx.unlock();window.addEventListener('pointerdown',unlock,{passive:true});window.addEventListener('keydown',unlock);return()=>{window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);};},[]);
   const [reduceMotion, setReduceMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || false;
@@ -233,9 +235,9 @@ export default function App() {
   }
 
   return (
-    <AdminDashboard
+    <Suspense fallback={<div className="p-8 text-center font-bold">جارٍ فتح بنك الكلمات...</div>}><AdminDashboard
       onExitHome={() => setScreen('title')}
       onBankMutated={refreshPlayableBank}
-    />
+    /></Suspense>
   );
 }

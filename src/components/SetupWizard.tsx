@@ -235,7 +235,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({
 
       {/* Interactive Stepper Bar */}
       <nav aria-label="خطوات الإعداد" className="px-4 sm:px-8 pt-4 max-w-5xl mx-auto w-full">
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="kh-setup-steps grid grid-cols-7 gap-1.5">
           {stepLabels.map((lbl, idx) => {
             const num = idx + 1;
             const active = num === step;

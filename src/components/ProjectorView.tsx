@@ -1,4 +1,6 @@
 import { QuestionStage } from './QuestionStage';
+import {MatchProgress,StageSound} from './MatchProgress';
+import {soundFx} from '../utils/sound';
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Crown, Flame, MonitorPlay, ShieldCheck, Timer, Vote } from 'lucide-react';
 import type { PublicRoomState } from '../types/game';
@@ -66,6 +68,10 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
     };
   }, [activeCode]);
 
+  const phase=state?.phase;
+  const round=state?.currentRound;
+  useEffect(()=>{if(phase==='SECRET_REVEAL')soundFx.playStart();if(phase==='VOTING'||phase==='TIE_BREAKER')soundFx.playDramaticCue();if(phase==='REVEAL')soundFx.playReveal();if(phase==='FINAL_WINNER')soundFx.playVictory();},[phase,round]);
+  useEffect(()=>{if(phase==='DISCUSSION'&&state?.timerRemaining&&state.timerRemaining<=5)soundFx.playTick();},[phase,state?.timerRemaining]);
   if (!activeCode) {
     return (
       <div className="min-h-svh bg-transparent text-ink flex flex-col items-center justify-center p-6">
@@ -117,6 +123,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
       {/* 16:9 Top Stage Bar */}
       <header className="flex items-center justify-between gap-3 border-b border-ink/25 pb-3 flex-wrap">
         <GameBrandLockup compact />
+        <StageSound />
 
         {state && (
           <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm lg:text-base font-bold tabular-nums">
@@ -144,6 +151,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
         </button>
       </header>
 
+      {state && <MatchProgress phase={state.phase} round={state.currentRound} total={state.config.totalRounds}/>}
       {/* Main Stage */}
       <main className="flex-1 flex flex-col justify-center py-4 max-w-7xl mx-auto w-full">
         {errorMsg && (
@@ -283,7 +291,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
               )}
 
               {state.phase === 'FINAL_WINNER' && (
-                <div className="space-y-5 py-6">
+                <div className="space-y-5 py-6 kh-winner">
                   <Crown className="w-20 h-20 text-berry mx-auto" />
                   <h2 className="font-display font-black text-5xl lg:text-6xl text-berry">
                     بطل الجلسة!

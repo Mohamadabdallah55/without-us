@@ -215,3 +215,37 @@ body:is([data-state=setup], [data-state=pass_and_play], [data-state=multi_device
 .party-account-menu p{margin:8px 0}
 .party-account-error{color:#a11d34}
 @media(max-width:650px){.party-hero{margin-top:12px;padding:15px}.party-hero-art{min-height:145px;aspect-ratio:auto}.party-how{grid-template-columns:1fr}.party-top{padding:8px 12px}.party-top>div{justify-content:center}.party-wordmark{font-size:2.8rem}.party-how>div{padding:9px}}
+
+/* Show stages — scoped, static surfaces and short CSS transitions. */
+body:is([data-state=setup],[data-state=pass_and_play],[data-state=multi_device],[data-state=projector]){background:radial-gradient(#8662ae22 1px,transparent 1.5px) 0 0/12px 12px,#261738}
+body:is([data-state=setup],[data-state=pass_and_play],[data-state=multi_device]) #root>div>header{background:#1c0a2b;color:#fff9ed;border-bottom:3px solid #100818}
+body:is([data-state=setup],[data-state=pass_and_play],[data-state=multi_device]) #root>div>header :is(.text-caption,.text-berry){color:#ffe45e}
+body:is([data-state=setup],[data-state=pass_and_play],[data-state=multi_device]) #root>div>header button{color:#291638;background:#fff9ed;border:1.5px solid #100818;box-shadow:0 3px #100818}
+body[data-state=setup] #root>div>header h2{color:#fff9ed}
+.kh-progress{width:min(900px,calc(100% - 24px));margin:12px auto 0;padding:8px 10px;display:flex;align-items:center;gap:10px;border:2px solid #100818;border-radius:13px;background:#fff9ed;color:#291638;box-shadow:0 3px #100818}
+.kh-round{white-space:nowrap;font-size:.72rem;font-weight:800;background:#291638;color:white;padding:7px 10px;border-radius:8px}
+.kh-round b{display:block;color:#ffe45e;font-size:.95rem;text-align:center}
+.kh-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;flex:1}
+.kh-steps>div{display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 3px;border-radius:8px;background:#ece2f5;font-size:clamp(.64rem,1.3vw,.85rem);font-weight:800}
+.kh-steps b{background:#fff9ed;color:#291638;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;flex:none}
+.kh-steps .kh-current{background:#ffdf55;box-shadow:0 2px #291638}.kh-steps .kh-done{background:#a2e2ba}
+.kh-sound{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:5px 9px;border:1.5px solid #291638;background:#ffdf55;color:#291638;border-radius:9px;font-size:.75rem;font-weight:900;cursor:pointer}
+.party-panel{border:2px solid #291638;box-shadow:0 6px #100818}
+.kh-secret-card{position:relative;isolation:isolate;border:3px solid #291638;box-shadow:0 7px #100818,0 0 0 4px #ffffff12}
+.kh-secret-card::before{content:"";display:block;height:7px;border-radius:20px;background:repeating-linear-gradient(90deg,#7950bc 0 20px,#ffe45e 20px 40px,#55db9b 40px 60px);margin-bottom:8px}
+.kh-secret-card button,.kh-vote-card button,.faceoff-controls button,.kh-results button{border:2px solid #291638;box-shadow:0 3px #291638}
+.kh-vote-card button[aria-pressed=true]{background:#ffdf55;border-color:#291638}
+.kh-setup-steps button{border:1px solid #100818;box-shadow:0 3px #100818}.kh-setup-steps button.bg-mintplay{background:#ffdf55}
+.faceoff{background:radial-gradient(#7950bc25 1px,transparent 1.5px) 0 0/9px 9px,#f1e6ff}
+.faceoff-player{box-shadow:0 6px #291638}.faceoff-meta .faceoff-urgent{background:#ffb5c8}
+.kh-trophy{background:#ffe45e!important;box-shadow:0 4px #291638;transform:rotate(-7deg)}
+.kh-results[data-celebrate=true],.kh-winner{background:radial-gradient(#7950bc35 1.2px,transparent 1.5px) 0 0/12px 12px,#fff0a3;border-radius:20px}
+.kh-winner{padding:24px}
+.projector-stage{background:#261738;color:#fff9ed}
+.projector-stage>header,.projector-stage>footer{border-color:#7950bc;color:#fff9ed}
+.projector-stage>header :is(.text-caption,.text-berry,.text-ink),.projector-stage>footer{color:#ffe45e}
+.projector-stage>header button{color:#291638}
+.projector-stage :is(.party-panel,aside,.kh-winner){color:#291638}
+.projector-stage aside{border:2px solid #291638;box-shadow:0 5px #100818}
+@media(max-width:650px){.kh-progress{gap:6px;padding:6px}.kh-steps>div{flex-direction:column;gap:2px}.kh-round{padding:5px 6px}.kh-steps b{width:17px;height:17px;font-size:.67rem}.kh-steps span{white-space:nowrap}.kh-sound span{display:none}.party-panel{padding:15px}}
+@media(prefers-reduced-motion:reduce){.kh-trophy{transform:none}}

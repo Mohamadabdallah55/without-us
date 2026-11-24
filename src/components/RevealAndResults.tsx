@@ -188,7 +188,7 @@ export const RevealAndResults: React.FC<RevealAndResultsProps> = ({
   // RESULTS or FINAL_WINNER
   const isFinal = phase === 'FINAL_WINNER';
   return (
-    <div data-celebrate={isFinal} className="max-w-3xl mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 party-panel party-stage-in space-y-6">
+    <div data-celebrate={isFinal} className="kh-results max-w-3xl mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 party-panel party-stage-in space-y-6">
       {summary.leaderChanged && !isFinal && summary.newLeaderName && (
         <div className="p-3.5 rounded-2xl bg-amber-400/15 border border-amber-400/50 text-center flex items-center justify-center gap-2 text-berry font-display font-extrabold text-lg">
           <Flame className="w-5 h-5" />
@@ -199,7 +199,7 @@ export const RevealAndResults: React.FC<RevealAndResultsProps> = ({
       <div className="text-center space-y-2">
         {isFinal ? (
           <>
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-400/20 border border-amber-400/50 flex items-center justify-center">
+            <div className="kh-trophy w-16 h-16 mx-auto rounded-2xl bg-amber-400/20 border border-amber-400/50 flex items-center justify-center">
               <Crown className="w-9 h-9 text-berry" />
             </div>
             <p className="text-sm font-bold text-berry">يا سلام… خلصت المباراة!</p>

@@ -20,6 +20,7 @@ import type {
 import { QuestionStage } from './QuestionStage';
 import { ROOM_SESSION_KEY } from '../game/session';
 import { soundFx } from '../utils/sound';
+import {MatchProgress,StageSound} from './MatchProgress';
 import { DiscussionStage } from './DiscussionStage';
 import { OutlierGuessStage, RevealAndResults } from './RevealAndResults';
 import { SecretCardReveal } from './SecretCardReveal';
@@ -353,6 +354,7 @@ export const MultiDeviceView: React.FC<MultiDeviceViewProps> = ({
       {/* Top Bar */}
       <header className="border-b border-ink/25 bg-paper/90 px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
         <GameBrandLockup compact />
+        <StageSound />
 
         <div className="flex items-center gap-3 text-xs sm:text-sm tabular-nums">
           <span className="font-mono-code font-bold text-berry">{roomState.roomCode}</span>
@@ -493,6 +495,7 @@ export const MultiDeviceView: React.FC<MultiDeviceViewProps> = ({
         </section>
       )}
 
+      <MatchProgress phase={roomState.phase} round={roomState.currentRound} total={roomState.config.totalRounds}/>
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 sm:py-8 space-y-5">
         {errorMsg && (
           <div role="alert" className="p-4 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-800 text-sm flex items-center gap-2">

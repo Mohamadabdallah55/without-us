@@ -13,6 +13,7 @@ import { createMatchups, getQuestionTurn, postponeMatchup, secondsLeft, timerDea
 import { LOCAL_MATCH_KEY, readSession, writeSession } from '../game/session';
 import { QuestionStage } from './QuestionStage';
 import { soundFx } from '../utils/sound';
+import {MatchProgress,StageSound} from './MatchProgress';
 import type {
   DiscussionCardEntry,
   GameConfig,
@@ -158,8 +159,9 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
     const update = () => {
       const next = secondsLeft(timerEndsAt);
       if (phase === 'DISCUSSION' && next > 0 && next <= 5 && previous !== next) soundFx.playTick();
-      previous = next;
-      setTimerRemaining(next);
+      if(next===0&&previous>0&&phase==='DISCUSSION')soundFx.playTimeout();
+      if(previous!==next)setTimerRemaining(next);
+      previous=next;
     };
     update();
     const id = window.setInterval(update, 200);
@@ -375,6 +377,7 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
       {/* Top Bar */}
       <header className="border-b border-ink/25 bg-paper/90 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
         <GameBrandLockup compact />
+        <StageSound />
 
         <div className="text-xs sm:text-sm text-caption tabular-nums hidden sm:block">
           جهاز واحد · الجولة <strong className="text-berry">{currentRound}</strong>/{config.totalRounds}
@@ -390,6 +393,7 @@ export const PassAndPlayView: React.FC<PassAndPlayViewProps> = ({
         </button>
       </header>
 
+      <MatchProgress phase={phase} round={currentRound} total={config.totalRounds}/>
       {backWarning && (
         <div className="bg-amber-500/15 border-b border-amber-400/40 px-4 py-3 flex flex-wrap items-center justify-between gap-3 max-w-4xl mx-auto w-full mt-3 rounded-xl">
           <p className="text-sm text-berry flex items-center gap-2">

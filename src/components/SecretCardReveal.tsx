@@ -69,7 +69,7 @@ export const SecretCardReveal: React.FC<SecretCardRevealProps> = ({
         holdTimerRef.current = null;
         setStage('revealed');
         setEverRevealed(true);
-        soundFx.playTap();
+        soundFx.playCard();
       }
     }, 16);
   };
@@ -85,7 +85,7 @@ export const SecretCardReveal: React.FC<SecretCardRevealProps> = ({
   };
 
   const handleHide = () => {
-    soundFx.playTap();
+    soundFx.playHide();
     setStage(isPassAndPlay ? 'handover' : 'ready_to_hold');
     setHoldProgress(0);
     onAcknowledgeAndHide();
@@ -93,7 +93,7 @@ export const SecretCardReveal: React.FC<SecretCardRevealProps> = ({
 
   if (stage === 'handover') {
     return (
-      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in space-y-6">
+      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in kh-secret-card space-y-6">
         {playerStepText && (
           <p className="text-xs font-semibold text-berry tabular-nums">{playerStepText}</p>
         )}
@@ -129,7 +129,7 @@ export const SecretCardReveal: React.FC<SecretCardRevealProps> = ({
 
   if (stage === 'ready_to_hold') {
     return (
-      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in space-y-6">
+      <div className="max-w-lg mx-auto w-full bg-paper border border-ink/25 rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in kh-secret-card space-y-6">
         {playerStepText && (
           <p className="text-xs font-semibold text-berry tabular-nums">{playerStepText}</p>
         )}
@@ -177,7 +177,7 @@ export const SecretCardReveal: React.FC<SecretCardRevealProps> = ({
         {!isPassAndPlay && everRevealed && (
           <button
             type="button"
-            onClick={() => setStage('revealed')}
+            onClick={() => {setStage('revealed');setEverRevealed(true);soundFx.playCard();}}
             className="text-xs text-berry hover:underline cursor-pointer inline-flex items-center gap-1"
           >
             <Eye className="w-3.5 h-3.5" />
@@ -191,7 +191,7 @@ export const SecretCardReveal: React.FC<SecretCardRevealProps> = ({
   // Revealed state: Two sharply distinct designs!
   return (
     <div
-      className={`max-w-lg mx-auto w-full rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in space-y-6 border-2 transition-transform duration-150 ${
+      className={`max-w-lg mx-auto w-full rounded-3xl p-6 sm:p-8 text-center party-panel party-stage-in kh-secret-card space-y-6 border-2 transition-transform duration-150 ${
         showOutlierCard
           ? 'bg-gradient-to-b from-lemon to-paper border-amber-400/70'
           : 'bg-gradient-to-b from-mintplay to-paper border-teal-400/70'
