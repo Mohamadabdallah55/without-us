@@ -566,6 +566,9 @@ async function startServer() {
       if (!origin) return true;
       try {
         const url = new URL(origin);
+        // The exact Render static preview is an additional first-party client.
+        // Keep the original same-origin check for every other client.
+        if (url.origin === 'https://without-us-static-preview-qnd0.onrender.com') return true;
         const forwarded = process.env.TRUST_PROXY === '1' ? req.headers['x-forwarded-host'] : undefined;
         return url.host === (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : req.headers.host);
       } catch {
