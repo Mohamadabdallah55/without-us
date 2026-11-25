@@ -113,7 +113,7 @@ export const MultiDeviceView: React.FC<MultiDeviceViewProps> = ({
     const connect = () => {
       if (closedByCleanup) return;
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+      const ws = new WebSocket(`${proto}//${window.location.hostname === "without-us-static-preview-qnd0.onrender.com" ? "without-us.onrender.com" : window.location.host}/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
